@@ -1,0 +1,34 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Platform
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner.xcworkspace/
+macos/Flutter/
+
+# Generated
+*.g.dart
+*.freezed.dart
+.dart_tool/
+pubspec.lock
+
+# OS
+.DS_Store
+Thumbs.db

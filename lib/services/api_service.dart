@@ -1,0 +1,336 @@
+import 'dart:convert';
+import 'dart:io';
+import '../models/models.dart';
+
+/// REST API client for the Django backend.
+///
+/// Configure [baseUrl] to point to your deployed Django server.
+/// Defaults to localhost for development.
+class ApiService {
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  ApiService._internal();
+
+  /// Base URL for the Django REST API.
+  /// Change this to your production URL when deploying.
+  String baseUrl = const String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://10.0.2.2:8000/api/v1',
+  );
+
+  final HttpClient _client = HttpClient();
+
+  // ─── HTTP Helpers ─────────────────────────────────────────────
+
+  Future<dynamic> _get(String path, {Map<String, String>? queryParams}) async {
+    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
+    final request = await _client.getUrl(uri);
+    request.headers.set('Content-Type', 'application/json');
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(body);
+    }
+    throw ApiException(response.statusCode, body);
+  }
+
+  Future<dynamic> _post(String path, Map<String, dynamic> data) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final request = await _client.postUrl(uri);
+    request.headers.set('Content-Type', 'application/json');
+    request.write(jsonEncode(data));
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(body);
+    }
+    throw ApiException(response.statusCode, body);
+  }
+
+  Future<dynamic> _put(String path, Map<String, dynamic> data) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final request = await _client.putUrl(uri);
+    request.headers.set('Content-Type', 'application/json');
+    request.write(jsonEncode(data));
+    final response = await request.close();
+    final body = await response.transform(utf8.decoder).join();
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(body);
+    }
+    throw ApiException(response.statusCode, body);
+  }
+
+  Future<void> _delete(String path) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final request = await _client.deleteUrl(uri);
+    final response = await request.close();
+    await response.drain();
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw ApiException(response.statusCode, 'Delete failed');
+    }
+  }
+
+  // ─── Animals ──────────────────────────────────────────────────
+
+  Future<List<Animal>> getAnimals({
+    String? species,
+    String? breed,
+    String? search,
+  }) async {
+    final params = <String, String>{};
+    if (species != null) params['species'] = species;
+    if (breed != null) params['breed'] = breed;
+    if (search != null) params['search'] = search;
+
+    final data = await _get('/animals/', queryParams: params.isEmpty ? null : params);
+    final results = data['results'] as List? ?? data as List;
+    return results.map((m) => _animalFromApi(m)).toList();
+  }
+
+  Future<Animal> getAnimal(String id) async {
+    final data = await _get('/animals/$id/');
+    return _animalFromApi(data);
+  }
+
+  Future<Animal> createAnimal(Animal animal) async {
+    final data = await _post('/animals/', _animalToApi(animal));
+    return _animalFromApi(data);
+  }
+
+  Future<Animal> updateAnimal(Animal animal) async {
+    final data = await _put('/animals/${animal.id}/', _animalToApi(animal));
+    return _animalFromApi(data);
+  }
+
+  Future<void> deleteAnimal(String id) async {
+    await _delete('/animals/$id/');
+  }
+
+  Future<Map<String, int>> getAnimalStats() async {
+    final data = await _get('/animals/stats/');
+    return Map<String, int>.from(
+      data.map((k, v) => MapEntry(k as String, v as int)),
+    );
+  }
+
+  // ─── Health Records ───────────────────────────────────────────
+
+  Future<List<HealthRecord>> getHealthRecords(String animalId) async {
+    final data = await _get('/health-records/', queryParams: {'animal': animalId});
+    final results = data['results'] as List? ?? data as List;
+    return results.map((m) => _healthRecordFromApi(m)).toList();
+  }
+
+  Future<HealthRecord> createHealthRecord(HealthRecord record) async {
+    final data = await _post('/health-records/', _healthRecordToApi(record));
+    return _healthRecordFromApi(data);
+  }
+
+  Future<void> deleteHealthRecord(String id) async {
+    await _delete('/health-records/$id/');
+  }
+
+  // ─── Breeding Records ────────────────────────────────────────
+
+  Future<List<BreedingRecord>> getActiveBreedings() async {
+    final data = await _get('/breeding-records/active/');
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) => _breedingRecordFromApi(m)).toList();
+  }
+
+  Future<BreedingRecord> createBreedingRecord(BreedingRecord record) async {
+    final data = await _post('/breeding-records/', _breedingRecordToApi(record));
+    return _breedingRecordFromApi(data);
+  }
+
+  // ─── Litters ──────────────────────────────────────────────────
+
+  Future<List<Litter>> getLitters() async {
+    final data = await _get('/litters/');
+    final results = data['results'] as List? ?? data as List;
+    return results.map((m) => _litterFromApi(m)).toList();
+  }
+
+  Future<Litter> createLitter(Litter litter) async {
+    final data = await _post('/litters/', _litterToApi(litter));
+    return _litterFromApi(data);
+  }
+
+  // ─── Genetics ─────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> getPedigree(String animalId, {int generations = 5}) async {
+    final data = await _get(
+      '/genetics/$animalId/pedigree/',
+      queryParams: {'generations': '$generations'},
+    );
+    return data as Map<String, dynamic>;
+  }
+
+  Future<double> calculateCOI(String sireId, String damId) async {
+    final data = await _get(
+      '/genetics/coi/',
+      queryParams: {'sire': sireId, 'dam': damId},
+    );
+    return (data['coi_percentage'] as num).toDouble();
+  }
+
+  Future<List<Map<String, dynamic>>> getBreedingSuggestions(String animalId) async {
+    final data = await _get('/genetics/$animalId/suggestions/');
+    if (data is List) return List<Map<String, dynamic>>.from(data);
+    return [];
+  }
+
+  // ─── Serialization Helpers ────────────────────────────────────
+
+  Animal _animalFromApi(Map<String, dynamic> m) {
+    return Animal(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      species: m['species'] as String,
+      breed: m['breed'] as String,
+      sex: Sex.values[m['sex'] as int],
+      dateOfBirth: m['date_of_birth'] != null
+          ? DateTime.parse(m['date_of_birth'] as String)
+          : null,
+      dateOfDeath: m['date_of_death'] != null
+          ? DateTime.parse(m['date_of_death'] as String)
+          : null,
+      color: m['color'] as String?,
+      markings: m['markings'] as String?,
+      registrationNumber: m['registration_number'] as String?,
+      microchipNumber: m['microchip_number'] as String?,
+      dnaProfileId: m['dna_profile_id'] as String?,
+      sireId: m['sire'] as String?,
+      damId: m['dam'] as String?,
+      breederName: m['breeder_name'] as String?,
+      weight: m['weight'] != null ? double.tryParse(m['weight'].toString()) : null,
+      height: m['height'] != null ? double.tryParse(m['height'].toString()) : null,
+      status: AnimalStatus.values[m['status'] as int? ?? 0],
+      geneticTraits: Map<String, dynamic>.from(m['genetic_traits'] ?? {}),
+      customFields: Map<String, dynamic>.from(m['custom_fields'] ?? {}),
+      notes: m['notes'] as String?,
+    );
+  }
+
+  Map<String, dynamic> _animalToApi(Animal a) {
+    return {
+      'name': a.name,
+      'species': a.species,
+      'breed': a.breed,
+      'sex': a.sex.index,
+      'date_of_birth': a.dateOfBirth?.toIso8601String().split('T').first,
+      'date_of_death': a.dateOfDeath?.toIso8601String().split('T').first,
+      'color': a.color ?? '',
+      'markings': a.markings ?? '',
+      'registration_number': a.registrationNumber ?? '',
+      'microchip_number': a.microchipNumber ?? '',
+      'dna_profile_id': a.dnaProfileId ?? '',
+      'sire': a.sireId,
+      'dam': a.damId,
+      'breeder_name': a.breederName ?? '',
+      'weight': a.weight,
+      'height': a.height,
+      'status': a.status.index,
+      'genetic_traits': a.geneticTraits,
+      'custom_fields': a.customFields,
+      'notes': a.notes ?? '',
+    };
+  }
+
+  HealthRecord _healthRecordFromApi(Map<String, dynamic> m) {
+    return HealthRecord(
+      id: m['id'] as String,
+      animalId: m['animal'] as String,
+      type: HealthRecordType.values[m['type'] as int],
+      title: m['title'] as String,
+      description: m['description'] as String?,
+      date: DateTime.parse(m['date'] as String),
+      nextDueDate: m['next_due_date'] != null
+          ? DateTime.parse(m['next_due_date'] as String)
+          : null,
+      veterinarian: m['veterinarian'] as String?,
+      clinic: m['clinic'] as String?,
+      cost: m['cost'] != null ? double.tryParse(m['cost'].toString()) : null,
+    );
+  }
+
+  Map<String, dynamic> _healthRecordToApi(HealthRecord r) {
+    return {
+      'animal': r.animalId,
+      'type': r.type.index,
+      'title': r.title,
+      'description': r.description ?? '',
+      'date': r.date.toIso8601String().split('T').first,
+      'next_due_date': r.nextDueDate?.toIso8601String().split('T').first,
+      'veterinarian': r.veterinarian ?? '',
+      'clinic': r.clinic ?? '',
+      'cost': r.cost,
+    };
+  }
+
+  BreedingRecord _breedingRecordFromApi(Map<String, dynamic> m) {
+    return BreedingRecord(
+      id: m['id'] as String,
+      sireId: m['sire'] as String,
+      damId: m['dam'] as String,
+      breedingDate: DateTime.parse(m['breeding_date'] as String),
+      expectedDueDate: m['expected_due_date'] != null
+          ? DateTime.parse(m['expected_due_date'] as String)
+          : null,
+      status: BreedingStatus.values[m['status'] as int? ?? 0],
+      method: m['method'] as String?,
+      expectedOffspringCoi: m['expected_offspring_coi'] as double?,
+    );
+  }
+
+  Map<String, dynamic> _breedingRecordToApi(BreedingRecord r) {
+    return {
+      'sire': r.sireId,
+      'dam': r.damId,
+      'breeding_date': r.breedingDate.toIso8601String().split('T').first,
+      'expected_due_date': r.expectedDueDate?.toIso8601String().split('T').first,
+      'status': r.status.index,
+      'method': r.method ?? '',
+      'expected_offspring_coi': r.expectedOffspringCoi,
+    };
+  }
+
+  Litter _litterFromApi(Map<String, dynamic> m) {
+    return Litter(
+      id: m['id'] as String,
+      sireId: m['sire'] as String,
+      damId: m['dam'] as String,
+      dateOfBirth: DateTime.parse(m['date_of_birth'] as String),
+      totalPuppies: m['total_puppies'] as int? ?? 0,
+      maleCount: m['male_count'] as int? ?? 0,
+      femaleCount: m['female_count'] as int? ?? 0,
+      stillborn: m['stillborn'] as int? ?? 0,
+      registrationNumber: m['registration_number'] as String?,
+      notes: m['notes'] as String?,
+    );
+  }
+
+  Map<String, dynamic> _litterToApi(Litter l) {
+    return {
+      'sire': l.sireId,
+      'dam': l.damId,
+      'date_of_birth': l.dateOfBirth.toIso8601String().split('T').first,
+      'total_puppies': l.totalPuppies,
+      'male_count': l.maleCount,
+      'female_count': l.femaleCount,
+      'stillborn': l.stillborn,
+      'registration_number': l.registrationNumber ?? '',
+      'notes': l.notes ?? '',
+    };
+  }
+}
+
+class ApiException implements Exception {
+  final int statusCode;
+  final String message;
+
+  ApiException(this.statusCode, this.message);
+
+  @override
+  String toString() => 'ApiException($statusCode): $message';
+}
