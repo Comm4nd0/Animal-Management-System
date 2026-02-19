@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:csv/csv.dart';
+import 'package:excel/excel.dart' as xl;
 import 'package:intl/intl.dart';
 
 import '../models/models.dart';
@@ -226,6 +228,114 @@ class ImportExportService {
     return ImportResult(
       totalRows: total,
       imported: total - skipped,
+      skipped: skipped,
+      errors: errors,
+      elapsed: stopwatch.elapsed,
+    );
+  }
+
+  /// Imports animals from Excel (.xlsx) file bytes.
+  ///
+  /// Reads the first sheet, treats the first row as headers.
+  Future<ImportResult> importExcelFromBytes(
+    Uint8List bytes, {
+    void Function(int processed, int total)? onProgress,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    final errors = <ImportError>[];
+    final animals = <Animal>[];
+
+    final excel = xl.Excel.decodeBytes(bytes);
+    if (excel.tables.isEmpty) {
+      return ImportResult(
+        totalRows: 0,
+        imported: 0,
+        skipped: 0,
+        errors: [const ImportError(row: 0, message: 'No sheets found in workbook.')],
+        elapsed: stopwatch.elapsed,
+      );
+    }
+
+    // Use the first sheet
+    final sheetName = excel.tables.keys.first;
+    final sheet = excel.tables[sheetName]!;
+    final rows = sheet.rows;
+
+    if (rows.isEmpty) {
+      return ImportResult(
+        totalRows: 0,
+        imported: 0,
+        skipped: 0,
+        errors: [const ImportError(row: 0, message: 'Sheet is empty.')],
+        elapsed: stopwatch.elapsed,
+      );
+    }
+
+    // Parse header row
+    final rawHeaders = rows.first
+        .map((c) => _normaliseHeader(
+            c?.value != null ? c!.value.toString() : ''))
+        .toList();
+
+    final colIndex = <String, int>{};
+    for (var i = 0; i < rawHeaders.length; i++) {
+      if (rawHeaders[i].isNotEmpty) colIndex[rawHeaders[i]] = i;
+    }
+
+    const required = ['name', 'species', 'breed'];
+    for (final col in required) {
+      if (!colIndex.containsKey(col)) {
+        return ImportResult(
+          totalRows: rows.length - 1,
+          imported: 0,
+          skipped: 0,
+          errors: [
+            ImportError(row: 0, message: 'Missing required column: "$col".')
+          ],
+          elapsed: stopwatch.elapsed,
+        );
+      }
+    }
+
+    final totalDataRows = rows.length - 1;
+    int skipped = 0;
+
+    for (var i = 1; i < rows.length; i++) {
+      // Convert Excel row cells to simple string list
+      final row = rows[i]
+          .map((c) => c?.value != null ? c!.value.toString() : '')
+          .toList();
+      try {
+        final animal = _parseRow(row, colIndex, i);
+        if (animal != null) {
+          animals.add(animal);
+        } else {
+          skipped++;
+        }
+      } catch (e) {
+        errors.add(ImportError(row: i + 1, message: e.toString()));
+        skipped++;
+      }
+
+      if (animals.length >= 500) {
+        await _db.batchInsertAnimals(animals);
+        animals.clear();
+      }
+
+      if (onProgress != null && (i % 200 == 0 || i == rows.length - 1)) {
+        onProgress(i, totalDataRows);
+      }
+    }
+
+    if (animals.isNotEmpty) {
+      await _db.batchInsertAnimals(animals);
+    }
+
+    stopwatch.stop();
+
+    return ImportResult(
+      totalRows: totalDataRows,
+      imported: totalDataRows - skipped,
       skipped: skipped,
       errors: errors,
       elapsed: stopwatch.elapsed,
