@@ -19,7 +19,7 @@ class DatabaseService {
     final path = join(dbPath, 'pedigree_manager.db');
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -165,11 +165,15 @@ class DatabaseService {
         'CREATE UNIQUE INDEX idx_custom_field_key ON custom_field_definitions (fieldKey)');
 
     await _createAnimalImagesTable(db);
+    await _createTeamMembersTable(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createAnimalImagesTable(db);
+    }
+    if (oldVersion < 3) {
+      await _createTeamMembersTable(db);
     }
   }
 
@@ -187,6 +191,20 @@ class DatabaseService {
     ''');
     await db.execute(
         'CREATE INDEX IF NOT EXISTS idx_animal_images_animal ON animal_images (animalId)');
+  }
+
+  Future<void> _createTeamMembersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS team_members (
+        id TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        email TEXT DEFAULT '',
+        firstName TEXT DEFAULT '',
+        lastName TEXT DEFAULT '',
+        role INTEGER NOT NULL DEFAULT 0,
+        createdAt INTEGER NOT NULL
+      )
+    ''');
   }
 
   // ─── Animal CRUD ────────────────────────────────────────────────
@@ -485,6 +503,46 @@ class DatabaseService {
       where: 'id = ? AND animalId = ?',
       whereArgs: [imageId, animalId],
     );
+  }
+
+  // ─── Team Members CRUD ────────────────────────────────────────
+
+  Future<void> insertTeamMember(TeamMember member) async {
+    final db = await database;
+    await db.insert('team_members', member.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteTeamMember(String id) async {
+    final db = await database;
+    await db.delete('team_members', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> updateTeamMemberRole(String id, int role) async {
+    final db = await database;
+    await db.update(
+      'team_members',
+      {'role': role},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Future<List<TeamMember>> getAllTeamMembers() async {
+    final db = await database;
+    final maps = await db.query('team_members', orderBy: 'role DESC, username ASC');
+    return maps.map((m) => TeamMember.fromMap(m)).toList();
+  }
+
+  Future<void> replaceAllTeamMembers(List<TeamMember> members) async {
+    final db = await database;
+    await db.delete('team_members');
+    final batch = db.batch();
+    for (final member in members) {
+      batch.insert('team_members', member.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   // ─── Stats ─────────────────────────────────────────────────────

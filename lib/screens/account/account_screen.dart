@@ -4,7 +4,7 @@ import '../../utils/app_theme.dart';
 import '../../utils/constants.dart';
 
 /// Account management screen showing the user's service tier,
-/// usage stats, breed lock status, and upgrade options.
+/// role, usage stats, breed lock status, team info, and upgrade options.
 class AccountScreen extends StatelessWidget {
   final UserProfile profile;
 
@@ -21,9 +21,13 @@ class AccountScreen extends StatelessWidget {
         children: [
           _buildProfileCard(context),
           const SizedBox(height: 16),
+          _buildRoleCard(context),
+          const SizedBox(height: 16),
           _buildTierCard(context, tierInfo),
           const SizedBox(height: 16),
           _buildUsageCard(context, tierInfo),
+          const SizedBox(height: 16),
+          _buildTeamCard(context, tierInfo),
           const SizedBox(height: 16),
           _buildBreedLockCard(context),
           if (profile.serviceTier != ServiceTier.enterprise) ...[
@@ -92,6 +96,48 @@ class AccountScreen extends StatelessWidget {
     );
   }
 
+  Widget _buildRoleCard(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: _getRoleColor(profile.role).withValues(alpha: 0.15),
+              child: Icon(
+                _getRoleIcon(profile.role),
+                color: _getRoleColor(profile.role),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Role: ${profile.roleLabel}',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    getUserRoleDescription(profile.role),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade600,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTierCard(BuildContext context, ServiceTierInfo tierInfo) {
     return Card(
       color: AppTheme.primaryColor.withValues(alpha: 0.05),
@@ -120,19 +166,26 @@ class AccountScreen extends StatelessWidget {
                   ),
             ),
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 _buildFeatureChip(
                   tierInfo.isUnlimited ? 'Unlimited' : '${tierInfo.maxAnimals} max',
                   Icons.pets,
                 ),
-                const SizedBox(width: 8),
                 _buildFeatureChip(
                   tierInfo.allowsMultiBreed ? 'Multi-breed' : 'Single breed',
                   tierInfo.allowsMultiBreed ? Icons.check_circle : Icons.lock,
                   color: tierInfo.allowsMultiBreed
                       ? AppTheme.primaryColor
                       : Colors.orange,
+                ),
+                _buildFeatureChip(
+                  tierInfo.hasUnlimitedUsers
+                      ? 'Unlimited users'
+                      : '${tierInfo.maxUsers} users',
+                  Icons.group,
                 ),
               ],
             ),
@@ -163,7 +216,7 @@ class AccountScreen extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Animals'),
+                const Text('Animals'),
                 Text(
                   tierInfo.isUnlimited
                       ? '${profile.animalCount} (unlimited)'
@@ -190,6 +243,72 @@ class AccountScreen extends StatelessWidget {
                       color: usagePercent > 0.9
                           ? AppTheme.errorColor
                           : Colors.grey.shade600,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamCard(BuildContext context, ServiceTierInfo tierInfo) {
+    final teamUsage = tierInfo.hasUnlimitedUsers
+        ? 0.0
+        : profile.teamCount / tierInfo.maxUsers!;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Team',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                if (profile.canManageUsers)
+                  TextButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/team'),
+                    icon: const Icon(Icons.manage_accounts, size: 18),
+                    label: const Text('Manage'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Team Members'),
+                Text(
+                  tierInfo.hasUnlimitedUsers
+                      ? '${profile.teamCount} (unlimited)'
+                      : '${profile.teamCount} / ${tierInfo.maxUsers}',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+            if (!tierInfo.hasUnlimitedUsers) ...[
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: teamUsage.clamp(0.0, 1.0),
+                backgroundColor: Colors.grey.shade200,
+                valueColor: AlwaysStoppedAnimation(
+                  teamUsage > 0.9 ? AppTheme.errorColor : AppTheme.primaryColor,
+                ),
+              ),
+            ],
+            if (!profile.canManageUsers) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Contact your account administrator to manage team members.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.grey.shade600,
                     ),
               ),
             ],
@@ -332,5 +451,31 @@ class AccountScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Color _getRoleColor(UserRole role) {
+    switch (role) {
+      case UserRole.owner:
+        return Colors.purple;
+      case UserRole.admin:
+        return Colors.blue;
+      case UserRole.contributor:
+        return AppTheme.primaryColor;
+      case UserRole.readOnly:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getRoleIcon(UserRole role) {
+    switch (role) {
+      case UserRole.owner:
+        return Icons.star;
+      case UserRole.admin:
+        return Icons.admin_panel_settings;
+      case UserRole.contributor:
+        return Icons.edit;
+      case UserRole.readOnly:
+        return Icons.visibility;
+    }
   }
 }

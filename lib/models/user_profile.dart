@@ -7,6 +7,7 @@ class UserProfile {
   final String firstName;
   final String lastName;
   final ServiceTier serviceTier;
+  final UserRole role;
   final String? registeredSpecies;
   final String? registeredBreed;
   final String? farmName;
@@ -16,6 +17,8 @@ class UserProfile {
   final int? animalsRemaining; // null = unlimited
   final int? maxAnimals;       // null = unlimited
   final bool allowsMultiBreed;
+  final int? maxUsers;         // null = unlimited
+  final int teamCount;
 
   const UserProfile({
     required this.id,
@@ -24,6 +27,7 @@ class UserProfile {
     this.firstName = '',
     this.lastName = '',
     this.serviceTier = ServiceTier.starter,
+    this.role = UserRole.owner,
     this.registeredSpecies,
     this.registeredBreed,
     this.farmName,
@@ -33,7 +37,11 @@ class UserProfile {
     this.animalsRemaining,
     this.maxAnimals,
     this.allowsMultiBreed = false,
+    this.maxUsers,
+    this.teamCount = 1,
   });
+
+  // ─── Tier helpers ──────────────────────────────────────────────
 
   String get tierLabel => getTierInfo(serviceTier).label;
   String get tierDescription => getTierInfo(serviceTier).description;
@@ -65,6 +73,32 @@ class UserProfile {
     return null; // valid
   }
 
+  // ─── Role helpers ──────────────────────────────────────────────
+
+  String get roleLabel => getUserRoleLabel(role);
+
+  bool get isOwner => role == UserRole.owner;
+  bool get isAdmin => role == UserRole.admin;
+  bool get isContributor => role == UserRole.contributor;
+  bool get isReadOnly => role == UserRole.readOnly;
+
+  /// Whether this user can manage team members (owners and admins).
+  bool get canManageUsers => role == UserRole.owner || role == UserRole.admin;
+
+  /// Whether this user can create/edit/delete data.
+  bool get canWriteData =>
+      role == UserRole.owner ||
+      role == UserRole.admin ||
+      role == UserRole.contributor;
+
+  /// Whether the organization can add more users.
+  bool canAddUser() {
+    if (maxUsers == null) return true;
+    return teamCount < maxUsers!;
+  }
+
+  // ─── Serialization ────────────────────────────────────────────
+
   factory UserProfile.fromApi(Map<String, dynamic> m) {
     final user = m['user'] as Map<String, dynamic>? ?? {};
     return UserProfile(
@@ -74,6 +108,7 @@ class UserProfile {
       firstName: user['first_name'] as String? ?? '',
       lastName: user['last_name'] as String? ?? '',
       serviceTier: ServiceTier.values[m['service_tier'] as int? ?? 0],
+      role: userRoleFromIndex(m['role'] as int? ?? 3),
       registeredSpecies: m['registered_species'] as String?,
       registeredBreed: m['registered_breed'] as String?,
       farmName: m['farm_name'] as String?,
@@ -83,6 +118,8 @@ class UserProfile {
       animalsRemaining: m['animals_remaining'] as int?,
       maxAnimals: m['max_animals'] as int?,
       allowsMultiBreed: m['allows_multi_breed'] as bool? ?? false,
+      maxUsers: m['max_users'] as int?,
+      teamCount: m['team_count'] as int? ?? 1,
     );
   }
 }

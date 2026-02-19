@@ -656,6 +656,12 @@ class _PricingCard extends StatelessWidget {
                   'Multiple breeds',
                   tier.allowsMultiBreed,
                 ),
+                _pricingFeature(
+                  tier.hasUnlimitedUsers
+                      ? 'Unlimited team members'
+                      : '${tier.maxUsers} team member${tier.maxUsers == 1 ? '' : 's'}',
+                  (tier.maxUsers ?? 0) > 1 || tier.hasUnlimitedUsers,
+                ),
                 const SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,

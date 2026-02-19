@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 from rest_framework import status as http_status
 
-from .models import UserProfile, ServiceTier, SERVICE_TIER_LIMITS
+from .models import UserProfile, ServiceTier, UserRole, SERVICE_TIER_LIMITS
 from animals.models import Animal
 
 
@@ -88,7 +88,77 @@ class ServiceTierModelTests(TestCase):
             limits = SERVICE_TIER_LIMITS[tier]
             self.assertIn('max_animals', limits)
             self.assertIn('allows_multi_breed', limits)
+            self.assertIn('max_users', limits)
             self.assertIn('label', limits)
+
+
+class UserRoleModelTests(TestCase):
+    def setUp(self):
+        self.owner_user = User.objects.create_user(
+            username='owner', password='testpass123', email='owner@test.com'
+        )
+        self.owner = UserProfile.objects.create(
+            user=self.owner_user,
+            role=UserRole.OWNER,
+            service_tier=ServiceTier.PROFESSIONAL,
+            farm_name='Owner Farm',
+        )
+
+    def test_owner_properties(self):
+        self.assertTrue(self.owner.is_owner)
+        self.assertFalse(self.owner.is_admin)
+        self.assertTrue(self.owner.can_manage_users)
+        self.assertTrue(self.owner.can_write_data)
+        self.assertIsNone(self.owner.organization)
+        self.assertEqual(self.owner.organization_owner, self.owner)
+
+    def test_admin_properties(self):
+        admin_user = User.objects.create_user('admin', 'admin@test.com', 'pass12345')
+        admin = UserProfile.objects.create(
+            user=admin_user, role=UserRole.ADMIN,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        self.assertTrue(admin.is_admin)
+        self.assertTrue(admin.can_manage_users)
+        self.assertTrue(admin.can_write_data)
+        self.assertEqual(admin.organization_owner, self.owner)
+
+    def test_contributor_properties(self):
+        contrib_user = User.objects.create_user('contrib', 'c@test.com', 'pass12345')
+        contrib = UserProfile.objects.create(
+            user=contrib_user, role=UserRole.CONTRIBUTOR,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        self.assertFalse(contrib.can_manage_users)
+        self.assertTrue(contrib.can_write_data)
+
+    def test_read_only_properties(self):
+        ro_user = User.objects.create_user('viewer', 'v@test.com', 'pass12345')
+        ro = UserProfile.objects.create(
+            user=ro_user, role=UserRole.READ_ONLY,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        self.assertFalse(ro.can_manage_users)
+        self.assertFalse(ro.can_write_data)
+        self.assertTrue(ro.is_read_only)
+
+    def test_team_members_count(self):
+        self.assertEqual(self.owner.get_team_count(), 1)  # Just the owner
+        admin_user = User.objects.create_user('admin2', 'a2@test.com', 'pass12345')
+        UserProfile.objects.create(
+            user=admin_user, role=UserRole.ADMIN,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        self.assertEqual(self.owner.get_team_count(), 2)
+
+    def test_can_add_user_within_limit(self):
+        self.assertTrue(self.owner.can_add_user())  # Professional: 10 users
+
+    def test_max_users_per_tier(self):
+        self.assertEqual(SERVICE_TIER_LIMITS[ServiceTier.STARTER]['max_users'], 1)
+        self.assertEqual(SERVICE_TIER_LIMITS[ServiceTier.STANDARD]['max_users'], 3)
+        self.assertEqual(SERVICE_TIER_LIMITS[ServiceTier.PROFESSIONAL]['max_users'], 10)
+        self.assertIsNone(SERVICE_TIER_LIMITS[ServiceTier.ENTERPRISE]['max_users'])
 
 
 class AccountAPITests(APITestCase):
@@ -182,3 +252,144 @@ class AccountAPITests(APITestCase):
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
         self.assertEqual(response.data['tier'], 'Professional')
         self.assertEqual(response.data['max_animals'], 200)
+
+    def test_register_creates_owner(self):
+        """Registration should create an owner-role profile."""
+        response = self.client.post('/api/v1/accounts/register/', {
+            'username': 'newowner',
+            'email': 'owner@new.com',
+            'password': 'securepass123',
+            'service_tier': ServiceTier.STANDARD,
+            'farm_name': 'New Farm',
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+        self.assertEqual(response.data['role'], UserRole.OWNER)
+        self.assertEqual(response.data['role_label'], 'Owner')
+
+    def test_me_includes_role_info(self):
+        user = User.objects.create_user('me_user', 'me@t.com', 'pass12345')
+        UserProfile.objects.create(
+            user=user, role=UserRole.OWNER,
+            service_tier=ServiceTier.STANDARD,
+        )
+        self.client.force_authenticate(user=user)
+        response = self.client.get('/api/v1/accounts/me/')
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(response.data['role'], UserRole.OWNER)
+        self.assertTrue(response.data['can_manage_users'])
+        self.assertTrue(response.data['can_write_data'])
+        self.assertEqual(response.data['team_count'], 1)
+
+
+class TeamManagementAPITests(APITestCase):
+    def setUp(self):
+        self.owner_user = User.objects.create_user(
+            'teamowner', 'to@test.com', 'pass12345'
+        )
+        self.owner = UserProfile.objects.create(
+            user=self.owner_user, role=UserRole.OWNER,
+            service_tier=ServiceTier.PROFESSIONAL,
+            farm_name='Team Farm',
+        )
+        self.client.force_authenticate(user=self.owner_user)
+
+    def test_list_team_members(self):
+        response = self.client.get('/api/v1/accounts/team/')
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)  # Just the owner
+        self.assertEqual(response.data[0]['role'], UserRole.OWNER)
+
+    def test_invite_user(self):
+        response = self.client.post('/api/v1/accounts/invite-user/', {
+            'username': 'newmember',
+            'email': 'nm@test.com',
+            'password': 'securepass123',
+            'role': UserRole.CONTRIBUTOR,
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_201_CREATED)
+        self.assertEqual(response.data['role'], UserRole.CONTRIBUTOR)
+        self.assertEqual(self.owner.get_team_count(), 2)
+
+    def test_invite_user_cannot_invite_as_owner(self):
+        response = self.client.post('/api/v1/accounts/invite-user/', {
+            'username': 'fake_owner',
+            'email': 'fo@test.com',
+            'password': 'securepass123',
+            'role': UserRole.OWNER,
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_400_BAD_REQUEST)
+
+    def test_update_role(self):
+        member_user = User.objects.create_user('mem', 'm@test.com', 'pass12345')
+        member = UserProfile.objects.create(
+            user=member_user, role=UserRole.READ_ONLY,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        response = self.client.post('/api/v1/accounts/update-role/', {
+            'member_id': str(member.id),
+            'role': UserRole.CONTRIBUTOR,
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        member.refresh_from_db()
+        self.assertEqual(member.role, UserRole.CONTRIBUTOR)
+
+    def test_cannot_change_owner_role(self):
+        response = self.client.post('/api/v1/accounts/update-role/', {
+            'member_id': str(self.owner.id),
+            'role': UserRole.ADMIN,
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_remove_team_member(self):
+        member_user = User.objects.create_user('rem', 'r@test.com', 'pass12345')
+        member = UserProfile.objects.create(
+            user=member_user, role=UserRole.CONTRIBUTOR,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        response = self.client.post('/api/v1/accounts/remove-user/', {
+            'member_id': str(member.id),
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_204_NO_CONTENT)
+        self.assertEqual(self.owner.get_team_count(), 1)
+
+    def test_cannot_remove_owner(self):
+        response = self.client.post('/api/v1/accounts/remove-user/', {
+            'member_id': str(self.owner.id),
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_admin_cannot_invite_admin(self):
+        admin_user = User.objects.create_user('adm', 'a@test.com', 'pass12345')
+        UserProfile.objects.create(
+            user=admin_user, role=UserRole.ADMIN,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        self.client.force_authenticate(user=admin_user)
+        response = self.client.post('/api/v1/accounts/invite-user/', {
+            'username': 'another_admin',
+            'email': 'aa@test.com',
+            'password': 'securepass123',
+            'role': UserRole.ADMIN,
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_read_only_cannot_invite(self):
+        ro_user = User.objects.create_user('ro', 'ro@test.com', 'pass12345')
+        UserProfile.objects.create(
+            user=ro_user, role=UserRole.READ_ONLY,
+            organization=self.owner, service_tier=ServiceTier.PROFESSIONAL,
+        )
+        self.client.force_authenticate(user=ro_user)
+        response = self.client.post('/api/v1/accounts/invite-user/', {
+            'username': 'should_fail',
+            'email': 'sf@test.com',
+            'password': 'securepass123',
+            'role': UserRole.READ_ONLY,
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_403_FORBIDDEN)
+
+    def test_tiers_include_max_users(self):
+        response = self.client.get('/api/v1/accounts/tiers/')
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        for tier in response.data:
+            self.assertIn('max_users', tier)

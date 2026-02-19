@@ -190,12 +190,55 @@ enum ServiceTier {
   enterprise,
 }
 
+/// User roles within an organization, matching the backend.
+enum UserRole {
+  readOnly,    // 0
+  contributor, // 1
+  admin,       // 2
+  owner,       // 3
+}
+
+/// Helper to get a UserRole from its integer index.
+UserRole userRoleFromIndex(int index) {
+  if (index < 0 || index >= UserRole.values.length) return UserRole.readOnly;
+  return UserRole.values[index];
+}
+
+/// Human-readable label for each role.
+String getUserRoleLabel(UserRole role) {
+  switch (role) {
+    case UserRole.readOnly:
+      return 'Read Only';
+    case UserRole.contributor:
+      return 'Contributor';
+    case UserRole.admin:
+      return 'Admin';
+    case UserRole.owner:
+      return 'Owner';
+  }
+}
+
+/// Description of what each role can do.
+String getUserRoleDescription(UserRole role) {
+  switch (role) {
+    case UserRole.readOnly:
+      return 'Can view all data but cannot make changes';
+    case UserRole.contributor:
+      return 'Can create, edit, and delete animals and records';
+    case UserRole.admin:
+      return 'Full data access plus can manage team members';
+    case UserRole.owner:
+      return 'Full control including billing and account settings';
+  }
+}
+
 class ServiceTierInfo {
   final ServiceTier tier;
   final String label;
   final String description;
   final int? maxAnimals; // null = unlimited
   final bool allowsMultiBreed;
+  final int? maxUsers; // null = unlimited
 
   const ServiceTierInfo({
     required this.tier,
@@ -203,39 +246,45 @@ class ServiceTierInfo {
     required this.description,
     required this.maxAnimals,
     required this.allowsMultiBreed,
+    required this.maxUsers,
   });
 
   bool get isUnlimited => maxAnimals == null;
+  bool get hasUnlimitedUsers => maxUsers == null;
 }
 
 const List<ServiceTierInfo> serviceTiers = [
   ServiceTierInfo(
     tier: ServiceTier.starter,
     label: 'Starter',
-    description: 'Up to 10 animals, single breed',
+    description: 'Up to 10 animals, single breed, 1 user',
     maxAnimals: 10,
     allowsMultiBreed: false,
+    maxUsers: 1,
   ),
   ServiceTierInfo(
     tier: ServiceTier.standard,
     label: 'Standard',
-    description: 'Up to 50 animals, single breed',
+    description: 'Up to 50 animals, single breed, 3 users',
     maxAnimals: 50,
     allowsMultiBreed: false,
+    maxUsers: 3,
   ),
   ServiceTierInfo(
     tier: ServiceTier.professional,
     label: 'Professional',
-    description: 'Up to 200 animals, single breed',
+    description: 'Up to 200 animals, single breed, 10 users',
     maxAnimals: 200,
     allowsMultiBreed: false,
+    maxUsers: 10,
   ),
   ServiceTierInfo(
     tier: ServiceTier.enterprise,
     label: 'Enterprise',
-    description: 'Unlimited animals, multiple species and breeds',
+    description: 'Unlimited animals, multiple species and breeds, unlimited users',
     maxAnimals: null,
     allowsMultiBreed: true,
+    maxUsers: null,
   ),
 ];
 

@@ -16,47 +16,85 @@ class ServiceTier(models.IntegerChoices):
     ENTERPRISE = 3, 'Enterprise'
 
 
-# Limits per tier: (max_animals, allows_multi_breed)
+class UserRole(models.IntegerChoices):
+    """
+    Roles within an organization account.
+
+    - OWNER: the main account holder, full control
+    - ADMIN: can manage users and all data
+    - CONTRIBUTOR: can create/edit/delete animals and records
+    - READ_ONLY: can only view data
+    """
+    READ_ONLY = 0, 'Read Only'
+    CONTRIBUTOR = 1, 'Contributor'
+    ADMIN = 2, 'Admin'
+    OWNER = 3, 'Owner'
+
+
+# Limits per tier: (max_animals, allows_multi_breed, max_users)
 SERVICE_TIER_LIMITS = {
     ServiceTier.STARTER: {
         'max_animals': 10,
         'allows_multi_breed': False,
+        'max_users': 1,
         'label': 'Starter',
-        'description': 'Up to 10 animals, single breed',
+        'description': 'Up to 10 animals, single breed, 1 user',
     },
     ServiceTier.STANDARD: {
         'max_animals': 50,
         'allows_multi_breed': False,
+        'max_users': 3,
         'label': 'Standard',
-        'description': 'Up to 50 animals, single breed',
+        'description': 'Up to 50 animals, single breed, 3 users',
     },
     ServiceTier.PROFESSIONAL: {
         'max_animals': 200,
         'allows_multi_breed': False,
+        'max_users': 10,
         'label': 'Professional',
-        'description': 'Up to 200 animals, single breed',
+        'description': 'Up to 200 animals, single breed, 10 users',
     },
     ServiceTier.ENTERPRISE: {
         'max_animals': None,  # unlimited
         'allows_multi_breed': True,
+        'max_users': None,  # unlimited
         'label': 'Enterprise',
-        'description': 'Unlimited animals, multiple species and breeds',
+        'description': 'Unlimited animals, multiple species and breeds, unlimited users',
     },
 }
 
 
 class UserProfile(models.Model):
     """
-    Extends the built-in User model with service tier and account details.
+    Extends the built-in User model with service tier, role, and account details.
 
     Each user account is locked to a single breed (species inferred from breed)
     unless they are on the Enterprise tier.
+
+    Users belong to an organization (the owner's profile). The owner is their
+    own organization head. Sub-users (admin, contributor, read-only) reference
+    the owner via the `organization` field.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='profile',
+    )
+    role = models.IntegerField(
+        choices=UserRole.choices,
+        default=UserRole.OWNER,
+        help_text='The user\'s role within their organization.',
+    )
+    # Self-referential FK: points to the account owner's profile.
+    # For the owner themselves, this is NULL (they ARE the organization).
+    organization = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='team_members',
+        help_text='The owner profile this user belongs to. NULL for owners.',
     )
     service_tier = models.IntegerField(
         choices=ServiceTier.choices,
@@ -88,7 +126,74 @@ class UserProfile(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.user.username} ({self.get_service_tier_display()})'
+        role_label = self.get_role_display()
+        return f'{self.user.username} ({self.get_service_tier_display()}, {role_label})'
+
+    # ─── Organization helpers ──────────────────────────────────────
+
+    @property
+    def is_owner(self):
+        return self.role == UserRole.OWNER
+
+    @property
+    def is_admin(self):
+        return self.role == UserRole.ADMIN
+
+    @property
+    def is_contributor(self):
+        return self.role == UserRole.CONTRIBUTOR
+
+    @property
+    def is_read_only(self):
+        return self.role == UserRole.READ_ONLY
+
+    @property
+    def can_manage_users(self):
+        """Owners and admins can manage team members."""
+        return self.role in (UserRole.OWNER, UserRole.ADMIN)
+
+    @property
+    def can_write_data(self):
+        """Owners, admins, and contributors can create/edit/delete records."""
+        return self.role in (UserRole.OWNER, UserRole.ADMIN, UserRole.CONTRIBUTOR)
+
+    @property
+    def organization_owner(self):
+        """Returns the owner profile for this user's organization."""
+        if self.is_owner:
+            return self
+        return self.organization
+
+    @property
+    def role_label(self):
+        return self.get_role_display()
+
+    def get_team_members(self):
+        """Get all team members for this organization (including the owner)."""
+        owner = self.organization_owner
+        if owner is None:
+            return UserProfile.objects.filter(pk=self.pk)
+        members = UserProfile.objects.filter(organization=owner)
+        return UserProfile.objects.filter(pk=owner.pk) | members
+
+    def get_team_count(self):
+        """Number of users in this organization (including the owner)."""
+        return self.get_team_members().count()
+
+    @property
+    def max_users(self):
+        """Max users allowed by the organization's tier."""
+        owner = self.organization_owner
+        if owner is None:
+            return SERVICE_TIER_LIMITS[self.service_tier]['max_users']
+        return SERVICE_TIER_LIMITS[owner.service_tier]['max_users']
+
+    def can_add_user(self):
+        """Check if the organization can add another team member."""
+        limit = self.max_users
+        if limit is None:
+            return True
+        return self.get_team_count() < limit
 
     # ─── Tier helpers ─────────────────────────────────────────────
 

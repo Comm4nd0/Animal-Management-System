@@ -16,6 +16,7 @@ import 'screens/health/health_records_screen.dart';
 import 'screens/litters/litter_list_screen.dart';
 import 'screens/account/registration_screen.dart';
 import 'screens/account/account_screen.dart';
+import 'screens/account/user_management_screen.dart';
 import 'screens/contacts/contacts_screen.dart';
 import 'screens/genetics/coi_calculator_screen.dart';
 import 'screens/genetics/stud_matcher_screen.dart';
@@ -77,6 +78,10 @@ class PedigreeManagerApp extends StatelessWidget {
         final profile = settings.arguments as UserProfile;
         return MaterialPageRoute(
           builder: (_) => AccountScreen(profile: profile),
+        );
+      case '/team':
+        return MaterialPageRoute(
+          builder: (_) => const UserManagementScreen(),
         );
       case '/animals':
         return MaterialPageRoute(

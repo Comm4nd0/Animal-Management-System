@@ -29,8 +29,9 @@ class AnimalProvider extends ChangeNotifier {
   // Cache of profile image paths keyed by animal ID
   final Map<String, String?> _profileImageCache = {};
 
-  // ─── Account / Tier ────────────────────────────────────────────
+  // ─── Account / Tier / Roles ──────────────────────────────────
   UserProfile? _userProfile;
+  List<TeamMember> _teamMembers = [];
 
   AnimalProvider({DatabaseService? db, GeneticsService? genetics, PedigreeValidator? validator})
       : _db = db ?? DatabaseService(),
@@ -56,6 +57,7 @@ class AnimalProvider extends ChangeNotifier {
   GeneticsService get geneticsService => _genetics;
   List<AnimalImage> get animalImages => _animalImages;
   UserProfile? get userProfile => _userProfile;
+  List<TeamMember> get teamMembers => _teamMembers;
 
   // ─── Tier Helpers ──────────────────────────────────────────────
 
@@ -77,6 +79,51 @@ class AnimalProvider extends ChangeNotifier {
 
   void setUserProfile(UserProfile profile) {
     _userProfile = profile;
+    notifyListeners();
+  }
+
+  // ─── Role Helpers ───────────────────────────────────────────────
+
+  /// Whether the current user can create/edit/delete data.
+  bool get canWriteData => _userProfile?.canWriteData ?? true;
+
+  /// Whether the current user can manage team members.
+  bool get canManageUsers => _userProfile?.canManageUsers ?? false;
+
+  /// Whether the current user is the account owner.
+  bool get isOwner => _userProfile?.isOwner ?? true;
+
+  /// Whether the current user is read-only.
+  bool get isReadOnly => _userProfile?.isReadOnly ?? false;
+
+  // ─── Team Management ───────────────────────────────────────────
+
+  Future<void> loadTeamMembers() async {
+    _teamMembers = await _db.getAllTeamMembers();
+    notifyListeners();
+  }
+
+  Future<void> addTeamMember(TeamMember member) async {
+    await _db.insertTeamMember(member);
+    _teamMembers = await _db.getAllTeamMembers();
+    notifyListeners();
+  }
+
+  Future<void> updateTeamMemberRole(String memberId, int role) async {
+    await _db.updateTeamMemberRole(memberId, role);
+    _teamMembers = await _db.getAllTeamMembers();
+    notifyListeners();
+  }
+
+  Future<void> removeTeamMember(String memberId) async {
+    await _db.deleteTeamMember(memberId);
+    _teamMembers = await _db.getAllTeamMembers();
+    notifyListeners();
+  }
+
+  Future<void> replaceAllTeamMembers(List<TeamMember> members) async {
+    await _db.replaceAllTeamMembers(members);
+    _teamMembers = members;
     notifyListeners();
   }
 

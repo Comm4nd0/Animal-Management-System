@@ -276,6 +276,22 @@ class _TierCard extends StatelessWidget {
                                 : Colors.grey.shade600,
                           ),
                         ),
+                        const SizedBox(width: 16),
+                        Icon(
+                          Icons.group,
+                          size: 14,
+                          color: Colors.grey.shade600,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          tier.hasUnlimitedUsers
+                              ? 'Unlimited users'
+                              : '${tier.maxUsers} user${tier.maxUsers == 1 ? '' : 's'}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                       ],
                     ),
                   ],

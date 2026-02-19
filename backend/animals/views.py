@@ -8,6 +8,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 
 from rest_framework.parsers import MultiPartParser, FormParser
 
+from accounts.permissions import ReadOnlyForReadOnlyUsers
 from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
 from .serializers import (
     AnimalListSerializer,
@@ -39,8 +40,13 @@ class AnimalViewSet(viewsets.ModelViewSet):
     - On create, validates the animal count and breed against the user's service tier.
     - Non-Enterprise tiers are locked to a single breed (set by the first animal added).
     - Enterprise tier allows unlimited animals and multiple species/breeds.
+
+    Role enforcement:
+    - Read-only users can only perform GET requests.
+    - Contributors, admins, and owners can perform all CRUD operations.
     """
     queryset = Animal.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['species', 'breed', 'sex', 'status']
     search_fields = ['name', 'breed', 'registration_number', 'microchip_number']
@@ -555,6 +561,7 @@ class HealthRecordViewSet(viewsets.ModelViewSet):
     Filter by animal: GET /api/v1/health-records/?animal={uuid}
     """
     queryset = HealthRecord.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
     serializer_class = HealthRecordSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['animal', 'type']
@@ -591,6 +598,7 @@ class BreedingRecordViewSet(viewsets.ModelViewSet):
     Filter by sire/dam: GET /api/v1/breeding-records/?sire={uuid}&dam={uuid}
     """
     queryset = BreedingRecord.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
     serializer_class = BreedingRecordSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['sire', 'dam', 'status']
@@ -617,6 +625,7 @@ class LitterViewSet(viewsets.ModelViewSet):
     Filter by sire/dam: GET /api/v1/litters/?sire={uuid}&dam={uuid}
     """
     queryset = Litter.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
     serializer_class = LitterSerializer
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['sire', 'dam']
@@ -633,6 +642,7 @@ class CustomFieldDefinitionViewSet(viewsets.ModelViewSet):
     Animal's custom_fields JSONField.
     """
     queryset = CustomFieldDefinition.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
     serializer_class = CustomFieldDefinitionSerializer
     filter_backends = [OrderingFilter]
     ordering_fields = ['display_order', 'name', 'created_at']
@@ -664,6 +674,7 @@ class ContactViewSet(viewsets.ModelViewSet):
     and current owner on another.
     """
     queryset = Contact.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
     serializer_class = ContactSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     search_fields = ['name', 'farm_name', 'email', 'prefix']
