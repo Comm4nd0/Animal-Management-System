@@ -133,7 +133,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
             ),
             const SizedBox(height: 12),
             TextButton(
-              onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+              onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
               child: const Text('Already have an account? Sign in'),
             ),
           ],
@@ -146,8 +146,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // In production, call ApiService().register(...)
-    // For now, navigate to home
-    Navigator.pushReplacementNamed(context, '/');
+    // For now, navigate to dashboard
+    Navigator.pushReplacementNamed(context, '/dashboard');
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

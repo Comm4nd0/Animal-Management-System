@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
@@ -30,6 +31,18 @@ class HomeScreen extends StatelessWidget {
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.pushNamed(context, '/animals'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Log Out',
+            onPressed: () {
+              // In production, clear auth tokens here
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                kIsWeb ? '/' : '/login',
+                (route) => false,
+              );
+            },
           ),
         ],
       ),

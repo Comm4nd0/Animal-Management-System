@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'models/models.dart';
 import 'services/animal_provider.dart';
 import 'utils/app_theme.dart';
+import 'screens/auth/landing_screen.dart';
+import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/animals/animal_list_screen.dart';
 import 'screens/animals/animal_detail_screen.dart';
@@ -33,7 +36,9 @@ class PedigreeManagerApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
-        initialRoute: '/',
+        // Web: start on the public landing page
+        // Mobile: start on the login screen
+        initialRoute: kIsWeb ? '/' : '/login',
         onGenerateRoute: _generateRoute,
       ),
     );
@@ -41,13 +46,26 @@ class PedigreeManagerApp extends StatelessWidget {
 
   Route<dynamic>? _generateRoute(RouteSettings settings) {
     switch (settings.name) {
+      // ─── Public routes ────────────────────────────────────────
       case '/':
+        // Web landing page; on mobile, redirect to login
         return MaterialPageRoute(
-          builder: (_) => const HomeScreen(),
+          builder: (_) =>
+              kIsWeb ? const LandingScreen() : const LoginScreen(),
+        );
+      case '/login':
+        return MaterialPageRoute(
+          builder: (_) => const LoginScreen(),
         );
       case '/register':
         return MaterialPageRoute(
           builder: (_) => const RegistrationScreen(),
+        );
+
+      // ─── Authenticated routes (dashboard) ─────────────────────
+      case '/dashboard':
+        return MaterialPageRoute(
+          builder: (_) => const HomeScreen(),
         );
       case '/account':
         final profile = settings.arguments as UserProfile;
@@ -101,7 +119,8 @@ class PedigreeManagerApp extends StatelessWidget {
         );
       default:
         return MaterialPageRoute(
-          builder: (_) => const HomeScreen(),
+          builder: (_) =>
+              kIsWeb ? const LandingScreen() : const LoginScreen(),
         );
     }
   }
