@@ -46,6 +46,14 @@ class Animal(models.Model):
         blank=True,
         related_name='dam_offspring',
     )
+    owner = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='animals',
+        help_text='The user account that owns this animal',
+    )
     owner_name = models.CharField(max_length=200, blank=True, default='')
     breeder_name = models.CharField(max_length=200, blank=True, default='')
     image = models.ImageField(upload_to='animals/', null=True, blank=True)

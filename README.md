@@ -1,33 +1,76 @@
 # Pedigree Manager
 
-A cross-platform pedigree animal management system with intelligent breeding suggestions, lineage tracking, and health record management.
+A cross-platform pedigree animal management system for **farm animals and horses**, with tiered service plans, intelligent breeding suggestions, lineage tracking, and health record management.
 
 ## Architecture
 
 ```
 ├── lib/                    # Flutter app (iOS, Android, Web)
-│   ├── models/             # Data models
-│   ├── services/           # Business logic & API client
-│   ├── screens/            # UI screens
+│   ├── models/             # Data models (Animal, UserProfile, etc.)
+│   ├── services/           # Business logic, API client, state management
+│   ├── screens/            # UI screens (home, animals, pedigree, breeding, account)
 │   ├── widgets/            # Reusable widgets
-│   └── utils/              # Theme, constants
+│   └── utils/              # Theme, constants, service tier definitions
 ├── backend/                # Django REST API
-│   ├── animals/            # Animal CRUD, health, breeding, litters
+│   ├── accounts/           # User registration, service tiers, tier enforcement
+│   ├── animals/            # Animal CRUD, health records, breeding, litters
 │   ├── genetics/           # COI calculation, breeding suggestions
-│   ├── pedigree_api/       # Django project settings
-│   └── config/             # AWS deployment config
-├── test/                   # Flutter tests
-└── config/                 # AWS RDS setup guide
+│   └── pedigree_api/       # Django project settings & URLs
+├── config/                 # AWS RDS setup guide
+└── test/                   # Flutter tests
 ```
 
+## Service Tiers
+
+Each user account chooses a service tier that determines their animal capacity and breed restrictions.
+**Only the Enterprise tier allows multiple species and breeds** - all other tiers are locked to a single breed.
+
+| Tier | Max Animals | Multi-Breed | Description |
+|------|-------------|-------------|-------------|
+| **Starter** | 10 | No | For small holdings and hobby breeders |
+| **Standard** | 50 | No | For established single-breed operations |
+| **Professional** | 200 | No | For large single-breed farms and studs |
+| **Enterprise** | Unlimited | **Yes** | For multi-species/breed operations |
+
+### How breed locking works
+
+1. New accounts on Starter/Standard/Professional start with no breed set
+2. When the **first animal** is added, the account is automatically locked to that animal's species and breed
+3. All subsequent animals must match the registered breed
+4. Enterprise accounts can add any species and breed at any time
+5. Downgrading from Enterprise requires all animals to be a single breed first
+
+## Supported Species
+
+The system is built for **farm animals and horses**:
+
+| Species | Example Breeds |
+|---------|----------------|
+| Horse | Thoroughbred, Arabian, Quarter Horse, Warmblood, Clydesdale, Shire, ... |
+| Cattle | Angus, Hereford, Charolais, Holstein, Jersey, Highland, Wagyu, ... |
+| Sheep | Suffolk, Merino, Dorper, Texel, Romney, Hampshire, ... |
+| Goat | Boer, Nubian, Alpine, Saanen, Toggenburg, Angora, ... |
+| Pig | Large White, Landrace, Duroc, Berkshire, Tamworth, Saddleback, ... |
+| Alpaca | (custom breed entry) |
+| Donkey | (custom breed entry) |
+| Poultry | (custom breed entry) |
+
 ## Features
+
+### Account Management
+- User registration with service tier selection
+- Account dashboard showing usage (animals used / limit)
+- Breed lock status display
+- Tier upgrade flow with validation (can't downgrade if over limits)
+- Farm/stud name and contact details
 
 ### Animal Management
 - Register animals with full pedigree details (species, breed, sex, DOB, color, markings)
 - Track registration numbers, microchip IDs, and DNA profiles
 - Link sire/dam relationships to build complete family trees
 - Search and filter by species, breed, name, or registration number
-- Photo management and custom fields per animal
+- Tier-enforced: species/breed must match account registration (non-Enterprise)
+- Tier-enforced: animal count must not exceed tier limit
 
 ### Pedigree Tree
 - Visual multi-generation pedigree tree display (up to 6 generations)
@@ -53,8 +96,8 @@ A cross-platform pedigree animal management system with intelligent breeding sug
 - Document attachments
 
 ### Breeding & Litter Management
-- Record breeding events with status tracking (Planned → Confirmed → Pregnant → Whelping → Completed)
-- Gestation progress tracking with expected due dates
+- Record breeding events with status tracking (Planned -> Confirmed -> Pregnant -> Whelping -> Completed)
+- Gestation progress tracking with species-specific due dates
 - Litter recording with male/female/stillborn counts
 - Link offspring to their birth litter
 
@@ -154,31 +197,67 @@ flutter test
 
 ## API Endpoints
 
+### Accounts
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET/POST | `/api/v1/animals/` | List/create animals |
+| POST | `/api/v1/accounts/register/` | Register new account with tier selection |
+| GET | `/api/v1/accounts/me/` | Get current user profile + tier info |
+| GET | `/api/v1/accounts/tiers/` | List all available service tiers |
+| POST | `/api/v1/accounts/change-tier/` | Change service tier (with validation) |
+
+### Animals
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/v1/animals/` | List/create animals (tier-enforced) |
 | GET/PUT/DELETE | `/api/v1/animals/{id}/` | Retrieve/update/delete animal |
-| GET | `/api/v1/animals/stats/` | Aggregate statistics |
+| GET | `/api/v1/animals/stats/` | Stats + tier usage info |
 | GET | `/api/v1/animals/{id}/offspring/` | Get offspring |
+
+### Health Records
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | GET/POST | `/api/v1/health-records/` | List/create health records |
 | GET | `/api/v1/health-records/upcoming/` | Due within 30 days |
 | GET | `/api/v1/health-records/overdue/` | Overdue records |
+
+### Breeding & Litters
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | GET/POST | `/api/v1/breeding-records/` | List/create breeding records |
 | GET | `/api/v1/breeding-records/active/` | Active breedings |
 | GET/POST | `/api/v1/litters/` | List/create litters |
+
+### Genetics
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | GET | `/api/v1/genetics/{id}/pedigree/` | Pedigree tree |
 | GET | `/api/v1/genetics/coi/?sire={id}&dam={id}` | Calculate COI |
 | GET | `/api/v1/genetics/{id}/suggestions/` | Breeding suggestions |
 | GET | `/api/v1/genetics/common-ancestors/?animal1={id}&animal2={id}` | Common ancestors |
 
+## Tier Enforcement
+
+The API enforces tier restrictions on animal creation:
+
+```
+POST /api/v1/animals/
+```
+
+**403 Forbidden** responses when:
+- User has reached their tier's animal limit
+- User tries to add an animal of a different breed (non-Enterprise)
+
+Response includes:
+```json
+{
+  "error": "Your Standard plan only allows a single breed. This account is registered for Horse - Thoroughbred. Upgrade to Enterprise for multi-species/breed support.",
+  "tier": "Standard"
+}
+```
+
 ## AWS RDS Configuration
 
-See [config/aws-rds-setup.md](config/aws-rds-setup.md) for detailed AWS RDS setup instructions including:
-- RDS instance creation (Console and CLI)
-- Security group configuration
-- Environment variable setup
-- Deployment options (ECS, Elastic Beanstalk, EC2)
-- Production checklist
+See [config/aws-rds-setup.md](config/aws-rds-setup.md) for detailed AWS RDS setup instructions.
 
 ## License
 

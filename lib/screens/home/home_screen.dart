@@ -14,6 +14,20 @@ class HomeScreen extends StatelessWidget {
         title: const Text('Pedigree Manager'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.person),
+            tooltip: 'Account',
+            onPressed: () {
+              final profile =
+                  context.read<AnimalProvider>().userProfile;
+              if (profile != null) {
+                Navigator.pushNamed(context, '/account',
+                    arguments: profile);
+              } else {
+                Navigator.pushNamed(context, '/register');
+              }
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.pushNamed(context, '/animals'),
           ),
@@ -74,7 +88,7 @@ class HomeScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Track lineage, manage health records, and get intelligent breeding suggestions for your animals.',
+              'Pedigree management, lineage tracking, and breeding suggestions for farm animals and horses.',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium

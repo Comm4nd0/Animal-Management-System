@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     # Local apps
+    'accounts',
     'animals',
     'genetics',
 ]

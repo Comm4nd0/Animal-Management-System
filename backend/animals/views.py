@@ -1,3 +1,4 @@
+from django.db import models as db_models
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -14,18 +15,24 @@ from .serializers import (
 )
 
 
+def _get_user_profile(request):
+    """Get the UserProfile for the authenticated user, or None."""
+    if not request.user.is_authenticated:
+        return None
+    try:
+        return request.user.profile
+    except Exception:
+        return None
+
+
 class AnimalViewSet(viewsets.ModelViewSet):
     """
     CRUD API for animals.
 
-    list: GET /api/v1/animals/
-    create: POST /api/v1/animals/
-    retrieve: GET /api/v1/animals/{id}/
-    update: PUT /api/v1/animals/{id}/
-    partial_update: PATCH /api/v1/animals/{id}/
-    destroy: DELETE /api/v1/animals/{id}/
-    offspring: GET /api/v1/animals/{id}/offspring/
-    stats: GET /api/v1/animals/stats/
+    Tier enforcement:
+    - On create, validates the animal count and breed against the user's service tier.
+    - Non-Enterprise tiers are locked to a single breed (set by the first animal added).
+    - Enterprise tier allows unlimited animals and multiple species/breeds.
     """
     queryset = Animal.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -39,12 +46,59 @@ class AnimalViewSet(viewsets.ModelViewSet):
             return AnimalListSerializer
         return AnimalDetailSerializer
 
+    def get_queryset(self):
+        """Optionally filter animals by the authenticated user's account."""
+        qs = super().get_queryset()
+        profile = _get_user_profile(self.request)
+        if profile is not None:
+            qs = qs.filter(owner=profile)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        """
+        Create an animal with tier-based validation.
+
+        Checks:
+        1. Has the user reached their animal limit?
+        2. Is the species/breed allowed for this account's tier?
+        """
+        profile = _get_user_profile(request)
+
+        if profile is not None:
+            species = request.data.get('species', '')
+            breed = request.data.get('breed', '')
+
+            is_valid, error_msg = profile.validate_animal_addition(species, breed)
+            if not is_valid:
+                return Response(
+                    {'error': error_msg, 'tier': profile.tier_label},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        response = super().create(request, *args, **kwargs)
+
+        # Lock breed on first animal for non-Enterprise tiers
+        if profile is not None and response.status_code == 201:
+            species = request.data.get('species', '')
+            breed = request.data.get('breed', '')
+            profile.lock_breed(species, breed)
+
+        return response
+
+    def perform_create(self, serializer):
+        """Automatically assign the animal to the authenticated user."""
+        profile = _get_user_profile(self.request)
+        if profile is not None:
+            serializer.save(owner=profile)
+        else:
+            serializer.save()
+
     @action(detail=True, methods=['get'])
     def offspring(self, request, pk=None):
         """Get all direct offspring of this animal."""
         animal = self.get_object()
         offspring = Animal.objects.filter(
-            models_sire=animal
+            sire=animal
         ) | Animal.objects.filter(dam=animal)
         serializer = AnimalListSerializer(offspring, many=True)
         return Response(serializer.data)
@@ -59,22 +113,35 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """Get aggregate statistics about all animals."""
-        total = Animal.objects.count()
-        males = Animal.objects.filter(sex=Animal.Sex.MALE).count()
-        females = Animal.objects.filter(sex=Animal.Sex.FEMALE).count()
-        breeds = Animal.objects.values('breed').distinct().count()
-        species = Animal.objects.values('species').distinct().count()
-        alive = Animal.objects.filter(status=Animal.Status.ALIVE).count()
+        """Get aggregate statistics for the user's animals."""
+        qs = self.get_queryset()
+        total = qs.count()
+        males = qs.filter(sex=Animal.Sex.MALE).count()
+        females = qs.filter(sex=Animal.Sex.FEMALE).count()
+        breeds = qs.values('breed').distinct().count()
+        species = qs.values('species').distinct().count()
+        alive = qs.filter(status=Animal.Status.ALIVE).count()
 
-        return Response({
+        result = {
             'total': total,
             'males': males,
             'females': females,
             'breeds': breeds,
             'species': species,
             'alive': alive,
-        })
+        }
+
+        # Include tier info if authenticated
+        profile = _get_user_profile(request)
+        if profile is not None:
+            result['tier'] = profile.tier_label
+            result['max_animals'] = profile.max_animals
+            result['animals_remaining'] = profile.animals_remaining()
+            result['allows_multi_breed'] = profile.allows_multi_breed
+            result['registered_breed'] = profile.registered_breed or None
+            result['registered_species'] = profile.registered_species or None
+
+        return Response(result)
 
     @action(detail=False, methods=['get'])
     def search(self, request):
@@ -82,11 +149,11 @@ class AnimalViewSet(viewsets.ModelViewSet):
         query = request.query_params.get('q', '')
         if not query:
             return Response([])
-        animals = Animal.objects.filter(
-            models.Q(name__icontains=query)
-            | models.Q(breed__icontains=query)
-            | models.Q(registration_number__icontains=query)
-            | models.Q(microchip_number__icontains=query)
+        animals = self.get_queryset().filter(
+            db_models.Q(name__icontains=query)
+            | db_models.Q(breed__icontains=query)
+            | db_models.Q(registration_number__icontains=query)
+            | db_models.Q(microchip_number__icontains=query)
         )[:25]
         serializer = AnimalListSerializer(animals, many=True)
         return Response(serializer.data)

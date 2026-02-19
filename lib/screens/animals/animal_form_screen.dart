@@ -27,7 +27,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   final _heightController = TextEditingController();
   final _notesController = TextEditingController();
 
-  String _selectedSpecies = Species.dog;
+  String _selectedSpecies = Species.horse;
   Sex _selectedSex = Sex.male;
   DateTime? _dateOfBirth;
   String? _selectedSireId;
@@ -96,6 +96,33 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // Breed restriction banner for non-Enterprise users
+                if (!_isEditing && provider.isBreedLocked)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock, color: Colors.orange.shade700, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Single breed account: '
+                            '${provider.registeredSpecies} - ${provider.registeredBreed}',
+                            style: TextStyle(
+                              color: Colors.orange.shade900,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 _buildSectionTitle('Basic Information'),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -125,12 +152,12 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   decoration: InputDecoration(
                     labelText: 'Breed *',
                     prefixIcon: const Icon(Icons.label),
-                    suffixIcon: _selectedSpecies == Species.dog
+                    suffixIcon: breedsForSpecies(_selectedSpecies).isNotEmpty
                         ? PopupMenuButton<String>(
                             icon: const Icon(Icons.arrow_drop_down),
                             onSelected: (v) =>
                                 setState(() => _breedController.text = v),
-                            itemBuilder: (_) => DogBreeds.popular
+                            itemBuilder: (_) => breedsForSpecies(_selectedSpecies)
                                 .map((b) =>
                                     PopupMenuItem(value: b, child: Text(b)))
                                 .toList(),
@@ -350,6 +377,31 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final provider = context.read<AnimalProvider>();
+
+    // Tier-based validation (only for new animals, not edits)
+    if (!_isEditing) {
+      final tierError = provider.validateAnimalAddition(
+        _selectedSpecies,
+        _breedController.text.trim(),
+      );
+      if (tierError != null) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Cannot Add Animal'),
+            content: Text(tierError),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    }
+
     final animal = Animal(
       id: widget.animalId,
       name: _nameController.text.trim(),

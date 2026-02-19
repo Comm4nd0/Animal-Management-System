@@ -3,6 +3,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from accounts.views import AccountViewSet
 from animals.views import (
     AnimalViewSet,
     HealthRecordViewSet,
@@ -12,6 +13,7 @@ from animals.views import (
 from genetics.views import GeneticsViewSet
 
 router = DefaultRouter()
+router.register(r'accounts', AccountViewSet, basename='account')
 router.register(r'animals', AnimalViewSet, basename='animal')
 router.register(r'health-records', HealthRecordViewSet, basename='health-record')
 router.register(r'breeding-records', BreedingRecordViewSet, basename='breeding-record')

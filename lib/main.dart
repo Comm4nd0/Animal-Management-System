@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'models/models.dart';
 import 'services/animal_provider.dart';
 import 'utils/app_theme.dart';
 import 'screens/home/home_screen.dart';
@@ -10,6 +11,8 @@ import 'screens/pedigree/pedigree_screen.dart';
 import 'screens/breeding/breeding_screen.dart';
 import 'screens/health/health_records_screen.dart';
 import 'screens/litters/litter_list_screen.dart';
+import 'screens/account/registration_screen.dart';
+import 'screens/account/account_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,6 +43,15 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/':
         return MaterialPageRoute(
           builder: (_) => const HomeScreen(),
+        );
+      case '/register':
+        return MaterialPageRoute(
+          builder: (_) => const RegistrationScreen(),
+        );
+      case '/account':
+        final profile = settings.arguments as UserProfile;
+        return MaterialPageRoute(
+          builder: (_) => AccountScreen(profile: profile),
         );
       case '/animals':
         return MaterialPageRoute(

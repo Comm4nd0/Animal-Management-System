@@ -18,6 +18,9 @@ class AnimalProvider extends ChangeNotifier {
   String? _selectedSpeciesFilter;
   String? _selectedBreedFilter;
 
+  // ─── Account / Tier ────────────────────────────────────────────
+  UserProfile? _userProfile;
+
   AnimalProvider({DatabaseService? db, GeneticsService? genetics})
       : _db = db ?? DatabaseService(),
         _genetics = genetics ?? GeneticsService();
@@ -35,6 +38,30 @@ class AnimalProvider extends ChangeNotifier {
   String? get selectedSpeciesFilter => _selectedSpeciesFilter;
   String? get selectedBreedFilter => _selectedBreedFilter;
   GeneticsService get geneticsService => _genetics;
+  UserProfile? get userProfile => _userProfile;
+
+  // ─── Tier Helpers ──────────────────────────────────────────────
+
+  bool get isBreedLocked =>
+      _userProfile != null && _userProfile!.isBreedLocked;
+
+  bool get allowsMultiBreed =>
+      _userProfile == null || _userProfile!.allowsMultiBreed;
+
+  String? get registeredSpecies => _userProfile?.registeredSpecies;
+  String? get registeredBreed => _userProfile?.registeredBreed;
+
+  /// Validate whether a new animal with the given species/breed can be added.
+  /// Returns null if valid, or an error message string.
+  String? validateAnimalAddition(String species, String breed) {
+    if (_userProfile == null) return null;
+    return _userProfile!.validateAnimalAddition(species, breed);
+  }
+
+  void setUserProfile(UserProfile profile) {
+    _userProfile = profile;
+    notifyListeners();
+  }
 
   List<Animal> get _filteredAnimals {
     var result = _animals;
