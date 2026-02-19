@@ -31,8 +31,8 @@ class UserRole(models.IntegerChoices):
     OWNER = 3, 'Owner'
 
 
-# Limits per tier: (max_animals, allows_multi_breed, max_users)
-SERVICE_TIER_LIMITS = {
+# Hard-coded defaults – used as fallback when no TierConfiguration row exists.
+SERVICE_TIER_DEFAULTS = {
     ServiceTier.STARTER: {
         'max_animals': 10,
         'allows_multi_breed': False,
@@ -62,6 +62,92 @@ SERVICE_TIER_LIMITS = {
         'description': 'Unlimited animals, multiple species and breeds, unlimited users',
     },
 }
+
+# Backwards-compat alias so existing imports still work.
+SERVICE_TIER_LIMITS = SERVICE_TIER_DEFAULTS
+
+
+class TierConfiguration(models.Model):
+    """
+    Database-configurable tier limits.
+
+    One row per service tier. If a row exists for a tier its values are used;
+    otherwise the hard-coded defaults in SERVICE_TIER_DEFAULTS apply.
+
+    Edit these via Django Admin at any time – changes take effect immediately.
+    """
+    tier = models.IntegerField(
+        choices=ServiceTier.choices,
+        unique=True,
+        help_text='The service tier this configuration applies to.',
+    )
+    label = models.CharField(
+        max_length=100,
+        help_text='Display name for this tier (e.g. "Starter").',
+    )
+    description = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        help_text='Short description shown to users.',
+    )
+    max_animals = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Maximum number of animals. Leave blank for unlimited.',
+    )
+    max_users = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text='Maximum number of team members. Leave blank for unlimited.',
+    )
+    allows_multi_breed = models.BooleanField(
+        default=False,
+        help_text='Whether this tier allows multiple species/breeds.',
+    )
+
+    class Meta:
+        ordering = ['tier']
+        verbose_name = 'Tier Configuration'
+        verbose_name_plural = 'Tier Configurations'
+
+    def __str__(self):
+        return f'{self.label} (Tier {self.tier})'
+
+    def to_dict(self):
+        """Return the same dict shape as SERVICE_TIER_DEFAULTS entries."""
+        return {
+            'max_animals': self.max_animals,
+            'allows_multi_breed': self.allows_multi_breed,
+            'max_users': self.max_users,
+            'label': self.label,
+            'description': self.description,
+        }
+
+
+def get_tier_limits(tier):
+    """
+    Return the limits dict for the given ServiceTier.
+
+    Reads from the TierConfiguration table first. If no row exists for
+    that tier, falls back to the hard-coded SERVICE_TIER_DEFAULTS.
+    """
+    try:
+        config = TierConfiguration.objects.get(tier=tier)
+        return config.to_dict()
+    except TierConfiguration.DoesNotExist:
+        return SERVICE_TIER_DEFAULTS[tier]
+
+
+def get_all_tier_limits():
+    """
+    Return a dict of {tier_id: limits_dict} for every tier, merging
+    DB overrides with hard-coded defaults.
+    """
+    result = dict(SERVICE_TIER_DEFAULTS)  # shallow copy
+    for config in TierConfiguration.objects.all():
+        result[config.tier] = config.to_dict()
+    return result
 
 
 class UserProfile(models.Model):
@@ -185,8 +271,8 @@ class UserProfile(models.Model):
         """Max users allowed by the organization's tier."""
         owner = self.organization_owner
         if owner is None:
-            return SERVICE_TIER_LIMITS[self.service_tier]['max_users']
-        return SERVICE_TIER_LIMITS[owner.service_tier]['max_users']
+            return get_tier_limits(self.service_tier)['max_users']
+        return get_tier_limits(owner.service_tier)['max_users']
 
     def can_add_user(self):
         """Check if the organization can add another team member."""
@@ -199,7 +285,7 @@ class UserProfile(models.Model):
 
     @property
     def tier_limits(self):
-        return SERVICE_TIER_LIMITS[self.service_tier]
+        return get_tier_limits(self.service_tier)
 
     @property
     def max_animals(self):

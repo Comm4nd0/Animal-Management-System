@@ -2,7 +2,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import UserProfile, SERVICE_TIER_LIMITS, ServiceTier, UserRole
+from .models import UserProfile, ServiceTier, UserRole, get_tier_limits, get_all_tier_limits
 from .permissions import IsOwnerOrAdmin
 from .serializers import (
     UserProfileSerializer,
@@ -56,9 +56,10 @@ class AccountViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'], url_path='tiers')
     def tiers(self, request):
-        """List all available service tiers with their limits."""
+        """List all available service tiers with their limits (from DB or defaults)."""
+        all_limits = get_all_tier_limits()
         tiers = []
-        for tier_id, limits in SERVICE_TIER_LIMITS.items():
+        for tier_id, limits in all_limits.items():
             tiers.append({
                 'tier_id': tier_id,
                 'label': limits['label'],
@@ -103,7 +104,7 @@ class AccountViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        new_limits = SERVICE_TIER_LIMITS[new_tier]
+        new_limits = get_tier_limits(new_tier)
         current_count = profile.get_animal_count()
 
         # Check animal count fits

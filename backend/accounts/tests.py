@@ -3,7 +3,11 @@ from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 from rest_framework import status as http_status
 
-from .models import UserProfile, ServiceTier, UserRole, SERVICE_TIER_LIMITS
+from .models import (
+    UserProfile, ServiceTier, UserRole,
+    TierConfiguration, get_tier_limits, get_all_tier_limits,
+    SERVICE_TIER_DEFAULTS,
+)
 from animals.models import Animal
 
 
@@ -82,14 +86,36 @@ class ServiceTierModelTests(TestCase):
         self.assertFalse(is_valid)
         self.assertIn('single breed', error.lower())
 
-    def test_all_tiers_have_limits(self):
+    def test_all_tiers_have_defaults(self):
         for tier in ServiceTier:
-            self.assertIn(tier, SERVICE_TIER_LIMITS)
-            limits = SERVICE_TIER_LIMITS[tier]
+            self.assertIn(tier, SERVICE_TIER_DEFAULTS)
+            limits = SERVICE_TIER_DEFAULTS[tier]
             self.assertIn('max_animals', limits)
             self.assertIn('allows_multi_breed', limits)
             self.assertIn('max_users', limits)
             self.assertIn('label', limits)
+
+    def test_get_tier_limits_uses_db(self):
+        """get_tier_limits() should read from TierConfiguration when it exists."""
+        # The migration seeds defaults, so DB rows exist
+        limits = get_tier_limits(ServiceTier.STARTER)
+        self.assertEqual(limits['max_animals'], 10)
+        # Override in DB
+        TierConfiguration.objects.filter(tier=ServiceTier.STARTER).update(max_animals=25)
+        limits = get_tier_limits(ServiceTier.STARTER)
+        self.assertEqual(limits['max_animals'], 25)
+
+    def test_get_tier_limits_falls_back(self):
+        """If DB row is deleted, falls back to hard-coded defaults."""
+        TierConfiguration.objects.filter(tier=ServiceTier.STARTER).delete()
+        limits = get_tier_limits(ServiceTier.STARTER)
+        self.assertEqual(limits['max_animals'], 10)  # from SERVICE_TIER_DEFAULTS
+
+    def test_get_all_tier_limits_merges(self):
+        """get_all_tier_limits() returns all tiers with DB overrides."""
+        all_limits = get_all_tier_limits()
+        self.assertEqual(len(all_limits), 4)
+        self.assertIn(ServiceTier.ENTERPRISE, all_limits)
 
 
 class UserRoleModelTests(TestCase):
@@ -155,10 +181,16 @@ class UserRoleModelTests(TestCase):
         self.assertTrue(self.owner.can_add_user())  # Professional: 10 users
 
     def test_max_users_per_tier(self):
-        self.assertEqual(SERVICE_TIER_LIMITS[ServiceTier.STARTER]['max_users'], 1)
-        self.assertEqual(SERVICE_TIER_LIMITS[ServiceTier.STANDARD]['max_users'], 3)
-        self.assertEqual(SERVICE_TIER_LIMITS[ServiceTier.PROFESSIONAL]['max_users'], 10)
-        self.assertIsNone(SERVICE_TIER_LIMITS[ServiceTier.ENTERPRISE]['max_users'])
+        """Default limits should be correct (from DB seed or fallback)."""
+        self.assertEqual(get_tier_limits(ServiceTier.STARTER)['max_users'], 1)
+        self.assertEqual(get_tier_limits(ServiceTier.STANDARD)['max_users'], 3)
+        self.assertEqual(get_tier_limits(ServiceTier.PROFESSIONAL)['max_users'], 10)
+        self.assertIsNone(get_tier_limits(ServiceTier.ENTERPRISE)['max_users'])
+
+    def test_db_override_affects_profile(self):
+        """Changing TierConfiguration in the DB should immediately affect UserProfile."""
+        TierConfiguration.objects.filter(tier=ServiceTier.PROFESSIONAL).update(max_animals=500)
+        self.assertEqual(self.owner.max_animals, 500)
 
 
 class AccountAPITests(APITestCase):

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import UserProfile, SERVICE_TIER_LIMITS, ServiceTier, UserRole
+from .models import UserProfile, ServiceTier, UserRole
 
 
 class UserSerializer(serializers.ModelSerializer):
