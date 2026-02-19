@@ -32,3 +32,21 @@ pubspec.lock
 # OS
 .DS_Store
 Thumbs.db
+
+# Environment / Secrets
+.env
+*.env
+backend/.env
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/*.tfstate
+deploy/terraform/*.tfstate.backup
+deploy/terraform/.terraform.lock.hcl
+deploy/terraform/terraform.tfvars
+deploy/terraform/tfplan
+
+# Python
+__pycache__/
+*.pyc
+db.sqlite3
