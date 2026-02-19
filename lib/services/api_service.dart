@@ -180,6 +180,32 @@ class ApiService {
     return [];
   }
 
+  // ─── Custom Field Definitions ────────────────────────────────
+
+  Future<List<CustomFieldDefinition>> getCustomFieldDefinitions() async {
+    final data = await _get('/custom-fields/');
+    final results = data['results'] as List? ?? data as List;
+    return results
+        .map((m) => CustomFieldDefinition.fromApi(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CustomFieldDefinition> createCustomFieldDefinition(
+      CustomFieldDefinition field) async {
+    final data = await _post('/custom-fields/', field.toApi());
+    return CustomFieldDefinition.fromApi(data);
+  }
+
+  Future<CustomFieldDefinition> updateCustomFieldDefinition(
+      CustomFieldDefinition field) async {
+    final data = await _put('/custom-fields/${field.id}/', field.toApi());
+    return CustomFieldDefinition.fromApi(data);
+  }
+
+  Future<void> deleteCustomFieldDefinition(String id) async {
+    await _delete('/custom-fields/$id/');
+  }
+
   // ─── Serialization Helpers ────────────────────────────────────
 
   Animal _animalFromApi(Map<String, dynamic> m) {

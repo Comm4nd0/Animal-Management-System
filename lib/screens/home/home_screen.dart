@@ -170,6 +170,14 @@ class HomeScreen extends StatelessWidget {
                 onTap: () => Navigator.pushNamed(context, '/litters'),
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.tune,
+                label: 'Custom Fields',
+                onTap: () => Navigator.pushNamed(context, '/custom-fields'),
+              ),
+            ),
           ],
         ),
       ],

@@ -259,3 +259,56 @@ class Litter(models.Model):
     @property
     def surviving_count(self):
         return self.total_puppies - self.stillborn
+
+
+class CustomFieldDefinition(models.Model):
+    """
+    Defines a custom field that a user can create for their animals.
+    The actual values are stored in the Animal.custom_fields JSONField.
+    """
+
+    class FieldType(models.IntegerChoices):
+        TEXT = 0, 'Text'
+        NUMBER = 1, 'Number'
+        DATE = 2, 'Date'
+        BOOLEAN = 3, 'Yes/No'
+        DROPDOWN = 4, 'Dropdown'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='custom_field_definitions',
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text='Display name for the custom field',
+    )
+    field_key = models.CharField(
+        max_length=100,
+        help_text='Storage key used in the custom_fields JSON (auto-generated from name)',
+    )
+    field_type = models.IntegerField(choices=FieldType.choices, default=FieldType.TEXT)
+    required = models.BooleanField(default=False)
+    options = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='List of options for dropdown fields',
+    )
+    display_order = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'name']
+        unique_together = [['owner', 'field_key']]
+
+    def __str__(self):
+        return f'{self.name} ({self.get_field_type_display()})'
+
+    def save(self, *args, **kwargs):
+        if not self.field_key:
+            import re
+            self.field_key = self.name.lower().replace(' ', '_').replace('-', '_')
+            self.field_key = re.sub(r'[^a-z0-9_]', '', self.field_key)
+        super().save(*args, **kwargs)

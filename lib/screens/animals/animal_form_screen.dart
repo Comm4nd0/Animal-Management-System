@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/constants.dart';
+import '../../utils/app_theme.dart';
 
 class AnimalFormScreen extends StatefulWidget {
   final String? animalId;
@@ -33,6 +34,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   String? _selectedSireId;
   String? _selectedDamId;
   bool _isEditing = false;
+  final Map<String, dynamic> _customFieldValues = {};
+  final Map<String, TextEditingController> _customFieldControllers = {};
 
   @override
   void initState() {
@@ -65,7 +68,21 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _notesController.text = animal.notes ?? '';
     _selectedSireId = animal.sireId;
     _selectedDamId = animal.damId;
+    // Load custom field values
+    _customFieldValues.addAll(animal.customFields);
+    for (final entry in animal.customFields.entries) {
+      if (entry.value is! bool) {
+        _getOrCreateController(entry.key).text = entry.value.toString();
+      }
+    }
     setState(() {});
+  }
+
+  TextEditingController _getOrCreateController(String key) {
+    return _customFieldControllers.putIfAbsent(
+      key,
+      () => TextEditingController(),
+    );
   }
 
   @override
@@ -80,6 +97,9 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _weightController.dispose();
     _heightController.dispose();
     _notesController.dispose();
+    for (final c in _customFieldControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -322,6 +342,32 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   ),
                 ),
 
+                // Custom Fields section
+                if (provider.customFieldDefinitions.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionTitle('Custom Fields'),
+                      TextButton.icon(
+                        icon: const Icon(Icons.tune, size: 16),
+                        label: const Text('Manage'),
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/custom-fields'),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...provider.customFieldDefinitions.map(
+                    (field) => _buildCustomField(field),
+                  ),
+                ],
+
                 const SizedBox(height: 24),
                 _buildSectionTitle('Notes'),
                 const SizedBox(height: 8),
@@ -359,6 +405,149 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
             color: Theme.of(context).colorScheme.primary,
           ),
     );
+  }
+
+  Widget _buildCustomField(CustomFieldDefinition field) {
+    final key = field.fieldKey;
+
+    switch (field.fieldType) {
+      case CustomFieldType.text:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TextFormField(
+            controller: _getOrCreateController(key),
+            decoration: InputDecoration(
+              labelText: '${field.name}${field.required ? ' *' : ''}',
+              prefixIcon: const Icon(Icons.text_fields),
+            ),
+            validator: field.required
+                ? (v) => v == null || v.isEmpty
+                    ? '${field.name} is required'
+                    : null
+                : null,
+            onChanged: (v) => _customFieldValues[key] = v,
+          ),
+        );
+
+      case CustomFieldType.number:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: TextFormField(
+            controller: _getOrCreateController(key),
+            decoration: InputDecoration(
+              labelText: '${field.name}${field.required ? ' *' : ''}',
+              prefixIcon: const Icon(Icons.tag),
+            ),
+            keyboardType: TextInputType.number,
+            validator: field.required
+                ? (v) => v == null || v.isEmpty
+                    ? '${field.name} is required'
+                    : null
+                : null,
+            onChanged: (v) {
+              final num? parsed = num.tryParse(v);
+              _customFieldValues[key] = parsed ?? v;
+            },
+          ),
+        );
+
+      case CustomFieldType.date:
+        final dateValue = _customFieldValues[key] as String?;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: ListTile(
+            leading: const Icon(Icons.calendar_today),
+            title: Text(
+              dateValue != null && dateValue.isNotEmpty
+                  ? dateValue
+                  : '${field.name}${field.required ? ' *' : ''}',
+            ),
+            subtitle: dateValue == null || dateValue.isEmpty
+                ? const Text('Tap to select')
+                : null,
+            trailing: dateValue != null && dateValue.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () {
+                      setState(() {
+                        _customFieldValues.remove(key);
+                      });
+                    },
+                  )
+                : null,
+            onTap: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: DateTime.now(),
+                firstDate: DateTime(1980),
+                lastDate: DateTime(2100),
+              );
+              if (picked != null) {
+                setState(() {
+                  _customFieldValues[key] =
+                      DateFormat('yyyy-MM-dd').format(picked);
+                });
+              }
+            },
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.grey.shade400),
+            ),
+          ),
+        );
+
+      case CustomFieldType.boolean:
+        final boolValue = _customFieldValues[key] as bool? ?? false;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SwitchListTile(
+            title: Text(field.name),
+            value: boolValue,
+            onChanged: (v) {
+              setState(() {
+                _customFieldValues[key] = v;
+              });
+            },
+            secondary: const Icon(Icons.check_box),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+        );
+
+      case CustomFieldType.dropdown:
+        final currentValue = _customFieldValues[key] as String?;
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: DropdownButtonFormField<String>(
+            value: field.options.contains(currentValue) ? currentValue : null,
+            decoration: InputDecoration(
+              labelText: '${field.name}${field.required ? ' *' : ''}',
+              prefixIcon: const Icon(Icons.arrow_drop_down_circle),
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('-- Select --')),
+              ...field.options.map(
+                (o) => DropdownMenuItem(value: o, child: Text(o)),
+              ),
+            ],
+            onChanged: (v) {
+              setState(() {
+                if (v == null) {
+                  _customFieldValues.remove(key);
+                } else {
+                  _customFieldValues[key] = v;
+                }
+              });
+            },
+            validator: field.required
+                ? (v) =>
+                    v == null || v.isEmpty ? '${field.name} is required' : null
+                : null,
+          ),
+        );
+    }
   }
 
   Future<void> _pickDateOfBirth() async {
@@ -402,6 +591,29 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       }
     }
 
+    // Collect custom field values from controllers
+    final customFields = <String, dynamic>{};
+    for (final fieldDef in provider.customFieldDefinitions) {
+      final key = fieldDef.fieldKey;
+      if (fieldDef.fieldType == CustomFieldType.text ||
+          fieldDef.fieldType == CustomFieldType.number) {
+        final controller = _customFieldControllers[key];
+        if (controller != null && controller.text.trim().isNotEmpty) {
+          if (fieldDef.fieldType == CustomFieldType.number) {
+            customFields[key] =
+                num.tryParse(controller.text.trim()) ?? controller.text.trim();
+          } else {
+            customFields[key] = controller.text.trim();
+          }
+        }
+      } else if (_customFieldValues.containsKey(key)) {
+        final val = _customFieldValues[key];
+        if (val != null && val.toString().isNotEmpty) {
+          customFields[key] = val;
+        }
+      }
+    }
+
     final animal = Animal(
       id: widget.animalId,
       name: _nameController.text.trim(),
@@ -431,6 +643,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       notes: _notesController.text.trim().isEmpty
           ? null
           : _notesController.text.trim(),
+      customFields: customFields,
     );
 
     if (_isEditing) {

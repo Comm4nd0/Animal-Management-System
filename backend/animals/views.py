@@ -5,13 +5,14 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from .models import Animal, HealthRecord, BreedingRecord, Litter
+from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition
 from .serializers import (
     AnimalListSerializer,
     AnimalDetailSerializer,
     HealthRecordSerializer,
     BreedingRecordSerializer,
     LitterSerializer,
+    CustomFieldDefinitionSerializer,
 )
 
 
@@ -47,11 +48,27 @@ class AnimalViewSet(viewsets.ModelViewSet):
         return AnimalDetailSerializer
 
     def get_queryset(self):
-        """Optionally filter animals by the authenticated user's account."""
+        """
+        Filter animals by the authenticated user's account and
+        apply custom field filters from query params.
+
+        Custom field filters use the prefix 'cf_':
+            ?cf_ear_tag=ABC123
+            ?cf_horn_status=Polled
+        """
         qs = super().get_queryset()
         profile = _get_user_profile(self.request)
         if profile is not None:
             qs = qs.filter(owner=profile)
+
+        # Apply custom field filters (params prefixed with 'cf_')
+        for param, value in self.request.query_params.items():
+            if param.startswith('cf_'):
+                field_key = param[3:]  # strip 'cf_' prefix
+                qs = qs.filter(
+                    **{f'custom_fields__{field_key}__icontains': value}
+                )
+
         return qs
 
     def create(self, request, *args, **kwargs):
@@ -145,16 +162,36 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def search(self, request):
-        """Search animals by query string."""
+        """
+        Search animals by query string.
+        Searches standard fields and all custom field values.
+        """
         query = request.query_params.get('q', '')
         if not query:
             return Response([])
-        animals = self.get_queryset().filter(
+
+        base_qs = self.get_queryset()
+        # Search standard fields
+        standard_q = (
             db_models.Q(name__icontains=query)
             | db_models.Q(breed__icontains=query)
             | db_models.Q(registration_number__icontains=query)
             | db_models.Q(microchip_number__icontains=query)
-        )[:25]
+        )
+
+        # Also search across all custom_fields values using JSON containment
+        # This finds any animal whose custom_fields JSON contains the query text
+        animals = base_qs.filter(standard_q)
+
+        # Additionally search custom fields by checking if any value matches
+        custom_matches = base_qs.exclude(
+            custom_fields={},
+        ).extra(
+            where=["CAST(custom_fields AS TEXT) ILIKE %s"],
+            params=[f'%{query}%'],
+        )
+        animals = (animals | custom_matches).distinct()[:25]
+
         serializer = AnimalListSerializer(animals, many=True)
         return Response(serializer.data)
 
@@ -232,3 +269,34 @@ class LitterViewSet(viewsets.ModelViewSet):
     filterset_fields = ['sire', 'dam']
     ordering_fields = ['date_of_birth', 'created_at']
     ordering = ['-date_of_birth']
+
+
+class CustomFieldDefinitionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD API for custom field definitions.
+
+    Each user defines their own set of custom fields which are then available
+    on all their animals. The actual field values are stored in each
+    Animal's custom_fields JSONField.
+    """
+    queryset = CustomFieldDefinition.objects.all()
+    serializer_class = CustomFieldDefinitionSerializer
+    filter_backends = [OrderingFilter]
+    ordering_fields = ['display_order', 'name', 'created_at']
+    ordering = ['display_order', 'name']
+
+    def get_queryset(self):
+        """Only return field definitions owned by the authenticated user."""
+        qs = super().get_queryset()
+        profile = _get_user_profile(self.request)
+        if profile is not None:
+            qs = qs.filter(owner=profile)
+        return qs
+
+    def perform_create(self, serializer):
+        """Automatically assign the definition to the authenticated user."""
+        profile = _get_user_profile(self.request)
+        if profile is not None:
+            serializer.save(owner=profile)
+        else:
+            serializer.save()

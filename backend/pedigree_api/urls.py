@@ -9,6 +9,7 @@ from animals.views import (
     HealthRecordViewSet,
     BreedingRecordViewSet,
     LitterViewSet,
+    CustomFieldDefinitionViewSet,
 )
 from genetics.views import GeneticsViewSet
 
@@ -18,6 +19,7 @@ router.register(r'animals', AnimalViewSet, basename='animal')
 router.register(r'health-records', HealthRecordViewSet, basename='health-record')
 router.register(r'breeding-records', BreedingRecordViewSet, basename='breeding-record')
 router.register(r'litters', LitterViewSet, basename='litter')
+router.register(r'custom-fields', CustomFieldDefinitionViewSet, basename='custom-field')
 router.register(r'genetics', GeneticsViewSet, basename='genetics')
 
 urlpatterns = [

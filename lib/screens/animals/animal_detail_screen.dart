@@ -189,6 +189,9 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     Animal? sire,
     Animal? dam,
   ) {
+    final provider = context.read<AnimalProvider>();
+    final customFieldDefs = provider.customFieldDefinitions;
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -221,6 +224,21 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
               'COI',
               '${animal.inbreedingCoefficient.toStringAsFixed(2)}%',
             ),
+          ]),
+        // Custom Fields section
+        if (animal.customFields.isNotEmpty)
+          _buildSection('Custom Fields', [
+            ...animal.customFields.entries.map((entry) {
+              final def = customFieldDefs
+                  .where((d) => d.fieldKey == entry.key)
+                  .toList();
+              final displayName = def.isNotEmpty ? def.first.name : entry.key;
+              final value = entry.value;
+              final displayValue = value is bool
+                  ? (value ? 'Yes' : 'No')
+                  : value.toString();
+              return _buildInfoRow(displayName, displayValue);
+            }),
           ]),
       ],
     );

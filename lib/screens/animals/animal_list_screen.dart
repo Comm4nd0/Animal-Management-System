@@ -118,8 +118,73 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
               ),
             ],
           ),
-          if (provider.selectedSpeciesFilter != null ||
-              provider.selectedBreedFilter != null)
+          // Custom field filters
+          ...provider.customFieldDefinitions.map((field) {
+            if (field.fieldType == CustomFieldType.dropdown) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: DropdownButtonFormField<String>(
+                  value: provider.customFieldFilters[field.fieldKey],
+                  decoration: InputDecoration(
+                    labelText: field.name,
+                    isDense: true,
+                  ),
+                  items: [
+                    DropdownMenuItem(
+                      value: null,
+                      child: Text('All ${field.name}'),
+                    ),
+                    ...field.options.map(
+                      (o) => DropdownMenuItem(value: o, child: Text(o)),
+                    ),
+                  ],
+                  onChanged: (v) =>
+                      provider.setCustomFieldFilter(field.fieldKey, v),
+                ),
+              );
+            } else if (field.fieldType == CustomFieldType.boolean) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: DropdownButtonFormField<String>(
+                  value: provider.customFieldFilters[field.fieldKey],
+                  decoration: InputDecoration(
+                    labelText: field.name,
+                    isDense: true,
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: null, child: Text('Any')),
+                    DropdownMenuItem(value: 'true', child: Text('Yes')),
+                    DropdownMenuItem(value: 'false', child: Text('No')),
+                  ],
+                  onChanged: (v) =>
+                      provider.setCustomFieldFilter(field.fieldKey, v),
+                ),
+              );
+            }
+            // Text and number fields: show a text filter input
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: TextField(
+                decoration: InputDecoration(
+                  labelText: 'Filter by ${field.name}',
+                  isDense: true,
+                  suffixIcon: provider.customFieldFilters[field.fieldKey] !=
+                          null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => provider.setCustomFieldFilter(
+                              field.fieldKey, null),
+                        )
+                      : null,
+                ),
+                onChanged: (v) => provider.setCustomFieldFilter(
+                  field.fieldKey,
+                  v.isEmpty ? null : v,
+                ),
+              ),
+            );
+          }),
+          if (provider.hasActiveFilters)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: TextButton(

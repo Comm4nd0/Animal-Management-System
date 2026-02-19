@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Animal, HealthRecord, BreedingRecord, Litter
+from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition
 
 
 class AnimalListSerializer(serializers.ModelSerializer):
@@ -109,3 +109,18 @@ class PedigreeNodeSerializer(serializers.Serializer):
         if obj.get('dam'):
             return PedigreeNodeSerializer(obj['dam']).data
         return None
+
+
+class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
+    """Serializer for custom field definitions."""
+    field_type_display = serializers.CharField(
+        source='get_field_type_display', read_only=True
+    )
+
+    class Meta:
+        model = CustomFieldDefinition
+        fields = [
+            'id', 'name', 'field_key', 'field_type', 'field_type_display',
+            'required', 'options', 'display_order', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'field_key', 'created_at', 'updated_at']

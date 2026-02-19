@@ -12,11 +12,13 @@ class AnimalProvider extends ChangeNotifier {
   List<HealthRecord> _healthRecords = [];
   List<BreedingRecord> _breedingRecords = [];
   List<Litter> _litters = [];
+  List<CustomFieldDefinition> _customFieldDefinitions = [];
   Map<String, int> _stats = {};
   bool _isLoading = false;
   String _searchQuery = '';
   String? _selectedSpeciesFilter;
   String? _selectedBreedFilter;
+  Map<String, String> _customFieldFilters = {};
 
   // ─── Account / Tier ────────────────────────────────────────────
   UserProfile? _userProfile;
@@ -32,11 +34,14 @@ class AnimalProvider extends ChangeNotifier {
   List<HealthRecord> get healthRecords => _healthRecords;
   List<BreedingRecord> get breedingRecords => _breedingRecords;
   List<Litter> get litters => _litters;
+  List<CustomFieldDefinition> get customFieldDefinitions =>
+      _customFieldDefinitions;
   Map<String, int> get stats => _stats;
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
   String? get selectedSpeciesFilter => _selectedSpeciesFilter;
   String? get selectedBreedFilter => _selectedBreedFilter;
+  Map<String, String> get customFieldFilters => _customFieldFilters;
   GeneticsService get geneticsService => _genetics;
   UserProfile? get userProfile => _userProfile;
 
@@ -70,13 +75,26 @@ class AnimalProvider extends ChangeNotifier {
       result = result.where((a) =>
           a.name.toLowerCase().contains(q) ||
           a.breed.toLowerCase().contains(q) ||
-          (a.registrationNumber?.toLowerCase().contains(q) ?? false)).toList();
+          (a.registrationNumber?.toLowerCase().contains(q) ?? false) ||
+          a.customFields.values.any(
+            (v) => v.toString().toLowerCase().contains(q),
+          )).toList();
     }
     if (_selectedSpeciesFilter != null) {
       result = result.where((a) => a.species == _selectedSpeciesFilter).toList();
     }
     if (_selectedBreedFilter != null) {
       result = result.where((a) => a.breed == _selectedBreedFilter).toList();
+    }
+    // Apply custom field filters
+    for (final entry in _customFieldFilters.entries) {
+      final key = entry.key;
+      final value = entry.value.toLowerCase();
+      result = result.where((a) {
+        final fieldValue = a.customFields[key];
+        if (fieldValue == null) return false;
+        return fieldValue.toString().toLowerCase().contains(value);
+      }).toList();
     }
     return result;
   }
@@ -104,6 +122,7 @@ class AnimalProvider extends ChangeNotifier {
       _breedingRecords = await _db.getActiveBreedings();
       _litters = await _db.getAllLitters();
       _stats = await _db.getAnimalStats();
+      _customFieldDefinitions = await _db.getCustomFieldDefinitions();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -201,6 +220,51 @@ class AnimalProvider extends ChangeNotifier {
     return await _genetics.calculateCOI(sireId: sireId, damId: damId);
   }
 
+  // ─── Custom Field Definitions ────────────────────────────────
+
+  Future<void> loadCustomFieldDefinitions() async {
+    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+    notifyListeners();
+  }
+
+  Future<void> addCustomFieldDefinition(CustomFieldDefinition field) async {
+    await _db.insertCustomFieldDefinition(field);
+    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+    notifyListeners();
+  }
+
+  Future<void> updateCustomFieldDefinition(CustomFieldDefinition field) async {
+    await _db.updateCustomFieldDefinition(field);
+    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+    notifyListeners();
+  }
+
+  Future<void> deleteCustomFieldDefinition(String id) async {
+    // Find the field key to remove values from all animals
+    final field = _customFieldDefinitions.firstWhere(
+      (f) => f.id == id,
+      orElse: () => CustomFieldDefinition(name: '', fieldKey: ''),
+    );
+
+    await _db.deleteCustomFieldDefinition(id);
+    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+
+    // Remove the field value from all animals that have it
+    if (field.fieldKey.isNotEmpty) {
+      for (final animal in _animals) {
+        if (animal.customFields.containsKey(field.fieldKey)) {
+          final updatedFields = Map<String, dynamic>.from(animal.customFields);
+          updatedFields.remove(field.fieldKey);
+          final updated = animal.copyWith(customFields: updatedFields);
+          await _db.updateAnimal(updated);
+        }
+      }
+      _animals = await _db.getAllAnimals();
+    }
+
+    notifyListeners();
+  }
+
   // ─── Filters ──────────────────────────────────────────────────
 
   void setSearchQuery(String query) {
@@ -218,10 +282,26 @@ class AnimalProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setCustomFieldFilter(String fieldKey, String? value) {
+    if (value == null || value.isEmpty) {
+      _customFieldFilters.remove(fieldKey);
+    } else {
+      _customFieldFilters[fieldKey] = value;
+    }
+    notifyListeners();
+  }
+
   void clearFilters() {
     _searchQuery = '';
     _selectedSpeciesFilter = null;
     _selectedBreedFilter = null;
+    _customFieldFilters = {};
     notifyListeners();
   }
+
+  bool get hasActiveFilters =>
+      _searchQuery.isNotEmpty ||
+      _selectedSpeciesFilter != null ||
+      _selectedBreedFilter != null ||
+      _customFieldFilters.isNotEmpty;
 }

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Animal, HealthRecord, BreedingRecord, Litter
+from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition
 
 
 @admin.register(Animal)
@@ -29,3 +29,11 @@ class BreedingRecordAdmin(admin.ModelAdmin):
 class LitterAdmin(admin.ModelAdmin):
     list_display = ['sire', 'dam', 'date_of_birth', 'total_puppies']
     raw_id_fields = ['sire', 'dam']
+
+
+@admin.register(CustomFieldDefinition)
+class CustomFieldDefinitionAdmin(admin.ModelAdmin):
+    list_display = ['name', 'field_key', 'field_type', 'required', 'owner', 'display_order']
+    list_filter = ['field_type', 'required']
+    search_fields = ['name', 'field_key']
+    raw_id_fields = ['owner']

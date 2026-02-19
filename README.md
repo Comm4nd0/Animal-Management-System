@@ -95,6 +95,16 @@ The system is built for **farm animals and horses**:
 - Veterinarian and cost tracking
 - Document attachments
 
+### Custom Fields
+- Define custom fields per account (Text, Number, Date, Yes/No, Dropdown types)
+- Fields appear automatically in animal add/edit forms
+- Custom field values displayed on animal detail screens
+- Search across all custom field values in the animal search bar
+- Filter animals by custom field values (dropdown filters, text search, boolean toggle)
+- Manage field definitions (create, edit, reorder, delete) from dedicated screen
+- Deleting a field definition removes its values from all animals
+- API supports filtering by custom field values using `cf_` prefixed query params
+
 ### Breeding & Litter Management
 - Record breeding events with status tracking (Planned -> Confirmed -> Pregnant -> Whelping -> Completed)
 - Gestation progress tracking with species-specific due dates
@@ -226,6 +236,18 @@ flutter test
 | GET/POST | `/api/v1/breeding-records/` | List/create breeding records |
 | GET | `/api/v1/breeding-records/active/` | Active breedings |
 | GET/POST | `/api/v1/litters/` | List/create litters |
+
+### Custom Fields
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET/POST | `/api/v1/custom-fields/` | List/create custom field definitions |
+| GET/PUT/DELETE | `/api/v1/custom-fields/{id}/` | Retrieve/update/delete field definition |
+
+**Filtering animals by custom fields:**
+```
+GET /api/v1/animals/?cf_ear_tag=ABC123&cf_horn_status=Polled
+```
+Custom field filters use the `cf_` prefix followed by the field key.
 
 ### Genetics
 | Method | Endpoint | Description |

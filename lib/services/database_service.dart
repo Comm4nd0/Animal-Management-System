@@ -116,6 +116,20 @@ class DatabaseService {
       )
     ''');
 
+    await db.execute('''
+      CREATE TABLE custom_field_definitions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        fieldKey TEXT NOT NULL,
+        fieldType INTEGER NOT NULL DEFAULT 0,
+        required INTEGER NOT NULL DEFAULT 0,
+        options TEXT DEFAULT '',
+        displayOrder INTEGER DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
+      )
+    ''');
+
     // Create indices for faster queries
     await db.execute(
         'CREATE INDEX idx_animals_species ON animals (species)');
@@ -131,6 +145,8 @@ class DatabaseService {
         'CREATE INDEX idx_breeding_sire ON breeding_records (sireId)');
     await db.execute(
         'CREATE INDEX idx_breeding_dam ON breeding_records (damId)');
+    await db.execute(
+        'CREATE UNIQUE INDEX idx_custom_field_key ON custom_field_definitions (fieldKey)');
   }
 
   // ─── Animal CRUD ────────────────────────────────────────────────
@@ -310,6 +326,33 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query('litters', orderBy: 'dateOfBirth DESC');
     return maps.map((m) => Litter.fromMap(m)).toList();
+  }
+
+  // ─── Custom Field Definitions CRUD ──────────────────────────────
+
+  Future<void> insertCustomFieldDefinition(CustomFieldDefinition field) async {
+    final db = await database;
+    await db.insert('custom_field_definitions', field.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateCustomFieldDefinition(CustomFieldDefinition field) async {
+    final db = await database;
+    await db.update('custom_field_definitions', field.toMap(),
+        where: 'id = ?', whereArgs: [field.id]);
+  }
+
+  Future<void> deleteCustomFieldDefinition(String id) async {
+    final db = await database;
+    await db.delete('custom_field_definitions',
+        where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<CustomFieldDefinition>> getCustomFieldDefinitions() async {
+    final db = await database;
+    final maps = await db.query('custom_field_definitions',
+        orderBy: 'displayOrder ASC, name ASC');
+    return maps.map((m) => CustomFieldDefinition.fromMap(m)).toList();
   }
 
   // ─── Stats ─────────────────────────────────────────────────────
