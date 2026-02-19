@@ -20,6 +20,8 @@ import 'screens/contacts/contacts_screen.dart';
 import 'screens/genetics/coi_calculator_screen.dart';
 import 'screens/genetics/stud_matcher_screen.dart';
 import 'screens/data_audit/data_audit_screen.dart';
+import 'screens/import_export/import_screen.dart';
+import 'screens/import_export/export_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
 
 void main() {
@@ -141,6 +143,14 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/data-audit':
         return MaterialPageRoute(
           builder: (_) => const DataAuditScreen(),
+        );
+      case '/import':
+        return MaterialPageRoute(
+          builder: (_) => const ImportScreen(),
+        );
+      case '/export':
+        return MaterialPageRoute(
+          builder: (_) => const ExportScreen(),
         );
       default:
         return MaterialPageRoute(

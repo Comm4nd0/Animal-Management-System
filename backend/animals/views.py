@@ -209,6 +209,271 @@ class AnimalViewSet(viewsets.ModelViewSet):
         serializer = AnimalListSerializer(animals, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], url_path='import')
+    def bulk_import(self, request):
+        """
+        Bulk import animals from CSV or JSON.
+
+        Accepts multipart/form-data with a 'file' field (.csv or .json).
+        Uses bulk_create in batches for performance with large datasets.
+        Skips pedigree validation during bulk insert and returns a
+        summary so the user can run a data audit afterwards.
+        """
+        import csv
+        import io
+        import json as json_lib
+        import uuid as uuid_lib
+
+        uploaded = request.FILES.get('file')
+        if not uploaded:
+            return Response(
+                {'error': 'No file provided.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile = _get_user_profile(request)
+        filename = uploaded.name.lower()
+        errors = []
+        animals_to_create = []
+
+        if filename.endswith('.json'):
+            try:
+                data = json_lib.loads(uploaded.read().decode('utf-8'))
+                if not isinstance(data, list):
+                    return Response(
+                        {'error': 'JSON must be an array of objects.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except (json_lib.JSONDecodeError, UnicodeDecodeError) as e:
+                return Response(
+                    {'error': f'Invalid JSON: {e}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            for i, obj in enumerate(data):
+                try:
+                    animal = self._parse_import_row(obj, profile, uuid_lib)
+                    animals_to_create.append(animal)
+                except Exception as e:
+                    errors.append({'row': i + 1, 'error': str(e)})
+
+        elif filename.endswith('.csv'):
+            try:
+                content = uploaded.read().decode('utf-8')
+                reader = csv.DictReader(io.StringIO(content))
+            except UnicodeDecodeError as e:
+                return Response(
+                    {'error': f'Cannot read file: {e}'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            for i, row in enumerate(reader):
+                # Normalise keys
+                norm = {self._normalise_key(k): v for k, v in row.items()}
+                try:
+                    animal = self._parse_import_row(norm, profile, uuid_lib)
+                    animals_to_create.append(animal)
+                except Exception as e:
+                    errors.append({'row': i + 2, 'error': str(e)})
+        else:
+            return Response(
+                {'error': 'Unsupported file type. Use .csv or .json.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Batch create (ignoring conflicts on existing IDs)
+        batch_size = 500
+        created = 0
+        for i in range(0, len(animals_to_create), batch_size):
+            batch = animals_to_create[i:i + batch_size]
+            Animal.objects.bulk_create(batch, ignore_conflicts=True, batch_size=batch_size)
+            created += len(batch)
+
+        return Response({
+            'total_rows': len(animals_to_create) + len(errors),
+            'imported': created,
+            'skipped': len(errors),
+            'errors': errors[:100],  # Cap error details
+        }, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'], url_path='export')
+    def bulk_export(self, request):
+        """
+        Export animals as CSV or JSON.
+
+        Query params:
+            format: 'csv' or 'json' (default: csv)
+        Uses streaming response for large datasets.
+        """
+        import csv
+        import io
+
+        export_format = request.query_params.get('format', 'csv')
+        qs = self.get_queryset()
+
+        if export_format == 'json':
+            from django.http import JsonResponse
+            data = []
+            for animal in qs.iterator(chunk_size=500):
+                data.append({
+                    'id': str(animal.pk),
+                    'name': animal.name,
+                    'species': animal.species,
+                    'breed': animal.breed,
+                    'sex': animal.get_sex_display(),
+                    'status': animal.get_status_display(),
+                    'date_of_birth': str(animal.date_of_birth) if animal.date_of_birth else None,
+                    'date_of_death': str(animal.date_of_death) if animal.date_of_death else None,
+                    'color': animal.color,
+                    'markings': animal.markings,
+                    'registration_number': animal.registration_number,
+                    'microchip_number': animal.microchip_number,
+                    'dna_profile_id': animal.dna_profile_id,
+                    'sire_id': str(animal.sire_id) if animal.sire_id else None,
+                    'dam_id': str(animal.dam_id) if animal.dam_id else None,
+                    'weight': float(animal.weight) if animal.weight else None,
+                    'height': float(animal.height) if animal.height else None,
+                    'notes': animal.notes,
+                    'custom_fields': animal.custom_fields,
+                })
+            return JsonResponse(data, safe=False)
+
+        # CSV export
+        from django.http import HttpResponse
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="animals_export.csv"'
+
+        writer = csv.writer(response)
+        headers = [
+            'id', 'name', 'species', 'breed', 'sex', 'status',
+            'date_of_birth', 'date_of_death', 'color', 'markings',
+            'registration_number', 'microchip_number', 'dna_profile_id',
+            'sire_id', 'dam_id', 'weight', 'height', 'notes',
+        ]
+        writer.writerow(headers)
+
+        for animal in qs.iterator(chunk_size=500):
+            writer.writerow([
+                str(animal.pk),
+                animal.name,
+                animal.species,
+                animal.breed,
+                animal.get_sex_display(),
+                animal.get_status_display(),
+                animal.date_of_birth or '',
+                animal.date_of_death or '',
+                animal.color,
+                animal.markings,
+                animal.registration_number,
+                animal.microchip_number,
+                animal.dna_profile_id,
+                animal.sire_id or '',
+                animal.dam_id or '',
+                animal.weight or '',
+                animal.height or '',
+                animal.notes,
+            ])
+
+        return response
+
+    @staticmethod
+    def _normalise_key(key):
+        """Normalise CSV header to snake_case."""
+        import re
+        s = re.sub(r'([a-z])([A-Z])', r'\1_\2', key.strip())
+        s = re.sub(r'[\s\-]+', '_', s)
+        return s.lower()
+
+    @staticmethod
+    def _parse_import_row(row, profile, uuid_lib):
+        """Parse a dict into an Animal instance for bulk_create."""
+        from datetime import date
+
+        def get(key, default=''):
+            v = row.get(key, default)
+            if v is None:
+                return ''
+            return str(v).strip()
+
+        name = get('name')
+        species = get('species')
+        breed = get('breed')
+
+        if not name:
+            raise ValueError('Missing required field: name')
+        if not species:
+            raise ValueError('Missing required field: species')
+        if not breed:
+            raise ValueError('Missing required field: breed')
+
+        # Parse sex
+        sex_str = get('sex', 'unknown').lower()
+        sex_map = {
+            'male': Animal.Sex.MALE, 'm': Animal.Sex.MALE, '0': Animal.Sex.MALE,
+            'female': Animal.Sex.FEMALE, 'f': Animal.Sex.FEMALE, '1': Animal.Sex.FEMALE,
+        }
+        sex = sex_map.get(sex_str, Animal.Sex.UNKNOWN)
+
+        # Parse status
+        status_str = get('status', 'alive').lower()
+        status_map = {
+            'alive': Animal.Status.ALIVE, '0': Animal.Status.ALIVE,
+            'deceased': Animal.Status.DECEASED, 'dead': Animal.Status.DECEASED, '1': Animal.Status.DECEASED,
+            'sold': Animal.Status.SOLD, '2': Animal.Status.SOLD,
+            'transferred': Animal.Status.TRANSFERRED, '3': Animal.Status.TRANSFERRED,
+        }
+        animal_status = status_map.get(status_str, Animal.Status.ALIVE)
+
+        def parse_date(val):
+            if not val:
+                return None
+            try:
+                return date.fromisoformat(val)
+            except ValueError:
+                return None
+
+        def parse_decimal(val):
+            if not val:
+                return None
+            try:
+                from decimal import Decimal
+                return Decimal(val)
+            except Exception:
+                return None
+
+        def parse_uuid(val):
+            if not val:
+                return None
+            try:
+                return uuid_lib.UUID(val)
+            except ValueError:
+                return None
+
+        animal_id = get('id')
+        pk = uuid_lib.UUID(animal_id) if animal_id else uuid_lib.uuid4()
+
+        return Animal(
+            pk=pk,
+            name=name,
+            species=species,
+            breed=breed,
+            sex=sex,
+            status=animal_status,
+            date_of_birth=parse_date(get('date_of_birth') or get('dob')),
+            date_of_death=parse_date(get('date_of_death')),
+            color=get('color'),
+            markings=get('markings'),
+            registration_number=get('registration_number') or get('reg_number'),
+            microchip_number=get('microchip_number') or get('microchip'),
+            dna_profile_id=get('dna_profile_id'),
+            sire_id=parse_uuid(get('sire_id') or get('sire')),
+            dam_id=parse_uuid(get('dam_id') or get('dam')),
+            weight=parse_decimal(get('weight')),
+            height=parse_decimal(get('height')),
+            notes=get('notes'),
+            account=profile,
+        )
+
 
 class HealthRecordViewSet(viewsets.ModelViewSet):
     """

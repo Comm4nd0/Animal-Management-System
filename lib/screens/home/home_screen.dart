@@ -235,6 +235,28 @@ class HomeScreen extends StatelessWidget {
             const Expanded(child: SizedBox()),
           ],
         ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.upload_file,
+                label: 'Import',
+                onTap: () => Navigator.pushNamed(context, '/import'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.download,
+                label: 'Export',
+                onTap: () => Navigator.pushNamed(context, '/export'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()),
+          ],
+        ),
       ],
     );
   }

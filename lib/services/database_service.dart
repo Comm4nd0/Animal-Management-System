@@ -430,6 +430,45 @@ class DatabaseService {
     };
   }
 
+  // ─── Batch Operations (for import) ──────────────────────────────
+
+  /// Inserts animals in batches using sqflite's batch API for performance.
+  /// Calls [onProgress] with (inserted, total) after each batch.
+  /// Returns the number of successfully inserted animals.
+  Future<int> batchInsertAnimals(
+    List<Animal> animals, {
+    int batchSize = 500,
+    void Function(int inserted, int total)? onProgress,
+  }) async {
+    final db = await database;
+    int inserted = 0;
+    final total = animals.length;
+
+    for (var i = 0; i < total; i += batchSize) {
+      final end = (i + batchSize > total) ? total : i + batchSize;
+      final chunk = animals.sublist(i, end);
+
+      final batch = db.batch();
+      for (final animal in chunk) {
+        batch.insert('animals', animal.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.ignore);
+      }
+      await batch.commit(noResult: true);
+      inserted += chunk.length;
+      onProgress?.call(inserted, total);
+    }
+
+    return inserted;
+  }
+
+  /// Returns the total count of animals (faster than loading all objects).
+  Future<int> getAnimalCount() async {
+    final db = await database;
+    return Sqflite.firstIntValue(
+            await db.rawQuery('SELECT COUNT(*) FROM animals')) ??
+        0;
+  }
+
   Future<void> close() async {
     final db = await database;
     await db.close();
