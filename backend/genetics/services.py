@@ -223,7 +223,7 @@ def _analyze_pairing(sire, dam, coi):
         ) / 2
 
     # Genetic diversity bonus
-    if sire.breeder_name and dam.breeder_name and sire.breeder_name != dam.breeder_name:
+    if sire.breeder and dam.breeder and sire.breeder != dam.breeder:
         pros.append('Different breeders - promotes genetic diversity')
         score += 5
 

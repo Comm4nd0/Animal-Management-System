@@ -16,6 +16,7 @@ import 'screens/health/health_records_screen.dart';
 import 'screens/litters/litter_list_screen.dart';
 import 'screens/account/registration_screen.dart';
 import 'screens/account/account_screen.dart';
+import 'screens/contacts/contacts_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
 
 void main() {
@@ -112,6 +113,10 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/litters':
         return MaterialPageRoute(
           builder: (_) => const LitterListScreen(),
+        );
+      case '/contacts':
+        return MaterialPageRoute(
+          builder: (_) => const ContactsScreen(),
         );
       case '/custom-fields':
         return MaterialPageRoute(

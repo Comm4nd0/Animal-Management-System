@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition
+from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
 from .serializers import (
     AnimalListSerializer,
     AnimalDetailSerializer,
@@ -13,6 +13,7 @@ from .serializers import (
     BreedingRecordSerializer,
     LitterSerializer,
     CustomFieldDefinitionSerializer,
+    ContactSerializer,
 )
 
 
@@ -59,7 +60,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         profile = _get_user_profile(self.request)
         if profile is not None:
-            qs = qs.filter(owner=profile)
+            qs = qs.filter(account=profile)
 
         # Apply custom field filters (params prefixed with 'cf_')
         for param, value in self.request.query_params.items():
@@ -106,7 +107,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
         """Automatically assign the animal to the authenticated user."""
         profile = _get_user_profile(self.request)
         if profile is not None:
-            serializer.save(owner=profile)
+            serializer.save(account=profile)
         else:
             serializer.save()
 
@@ -298,5 +299,37 @@ class CustomFieldDefinitionViewSet(viewsets.ModelViewSet):
         profile = _get_user_profile(self.request)
         if profile is not None:
             serializer.save(owner=profile)
+        else:
+            serializer.save()
+
+
+class ContactViewSet(viewsets.ModelViewSet):
+    """
+    CRUD API for contacts (breeders and owners).
+
+    Contacts are scoped to the authenticated user's account.
+    The same contact can be assigned as a breeder on one animal
+    and current owner on another.
+    """
+    queryset = Contact.objects.all()
+    serializer_class = ContactSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'farm_name', 'email', 'prefix']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
+
+    def get_queryset(self):
+        """Only return contacts belonging to the authenticated user."""
+        qs = super().get_queryset()
+        profile = _get_user_profile(self.request)
+        if profile is not None:
+            qs = qs.filter(account=profile)
+        return qs
+
+    def perform_create(self, serializer):
+        """Auto-assign the contact to the authenticated user's account."""
+        profile = _get_user_profile(self.request)
+        if profile is not None:
+            serializer.save(account=profile)
         else:
             serializer.save()

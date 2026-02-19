@@ -180,6 +180,30 @@ class ApiService {
     return [];
   }
 
+  // ─── Contacts ───────────────────────────────────────────────
+
+  Future<List<Contact>> getContacts() async {
+    final data = await _get('/contacts/');
+    final results = data['results'] as List? ?? data as List;
+    return results
+        .map((m) => Contact.fromApi(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<Contact> createContact(Contact contact) async {
+    final data = await _post('/contacts/', contact.toApi());
+    return Contact.fromApi(data);
+  }
+
+  Future<Contact> updateContact(Contact contact) async {
+    final data = await _put('/contacts/${contact.id}/', contact.toApi());
+    return Contact.fromApi(data);
+  }
+
+  Future<void> deleteContact(String id) async {
+    await _delete('/contacts/$id/');
+  }
+
   // ─── Custom Field Definitions ────────────────────────────────
 
   Future<List<CustomFieldDefinition>> getCustomFieldDefinitions() async {
@@ -228,7 +252,8 @@ class ApiService {
       dnaProfileId: m['dna_profile_id'] as String?,
       sireId: m['sire'] as String?,
       damId: m['dam'] as String?,
-      breederName: m['breeder_name'] as String?,
+      breederId: m['breeder'] as String?,
+      currentOwnerId: m['current_owner'] as String?,
       weight: m['weight'] != null ? double.tryParse(m['weight'].toString()) : null,
       height: m['height'] != null ? double.tryParse(m['height'].toString()) : null,
       status: AnimalStatus.values[m['status'] as int? ?? 0],
@@ -253,7 +278,8 @@ class ApiService {
       'dna_profile_id': a.dnaProfileId ?? '',
       'sire': a.sireId,
       'dam': a.damId,
-      'breeder_name': a.breederName ?? '',
+      'breeder': a.breederId,
+      'current_owner': a.currentOwnerId,
       'weight': a.weight,
       'height': a.height,
       'status': a.status.index,

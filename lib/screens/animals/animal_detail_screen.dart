@@ -212,11 +212,9 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
           if (animal.height != null)
             _buildInfoRow('Height', '${animal.height} cm'),
         ]),
-        _buildSection('Ownership', [
-          if (animal.breederName != null)
-            _buildInfoRow('Breeder', animal.breederName!),
-          if (animal.ownerId != null)
-            _buildInfoRow('Owner ID', animal.ownerId!),
+        _buildSection('Breeder & Owner', [
+          _buildContactRow('Breeder', animal.breederId, provider),
+          _buildContactRow('Owner', animal.currentOwnerId, provider),
         ]),
         if (animal.inbreedingCoefficient > 0)
           _buildSection('Genetics', [
@@ -438,6 +436,62 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             ...children,
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildContactRow(
+    String label,
+    String? contactId,
+    AnimalProvider provider,
+  ) {
+    final contact = provider.getContactById(contactId);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              label,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: contact != null
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        contact.displayName,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      if (contact.phone.isNotEmpty)
+                        Text(
+                          contact.phone,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      if (contact.email.isNotEmpty)
+                        Text(
+                          contact.email,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                    ],
+                  )
+                : Text('Not set',
+                    style: TextStyle(color: Colors.grey.shade500)),
+          ),
+        ],
       ),
     );
   }

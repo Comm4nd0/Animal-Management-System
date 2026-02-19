@@ -41,8 +41,8 @@ class DatabaseService {
         dnaProfileId TEXT,
         sireId TEXT,
         damId TEXT,
-        ownerId TEXT,
-        breederName TEXT,
+        breederId TEXT,
+        currentOwnerId TEXT,
         imagePath TEXT,
         weight REAL,
         height REAL,
@@ -113,6 +113,21 @@ class DatabaseService {
         createdAt INTEGER NOT NULL,
         FOREIGN KEY (sireId) REFERENCES animals (id),
         FOREIGN KEY (damId) REFERENCES animals (id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE contacts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        farmName TEXT DEFAULT '',
+        email TEXT DEFAULT '',
+        phone TEXT DEFAULT '',
+        address TEXT DEFAULT '',
+        prefix TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        createdAt INTEGER NOT NULL,
+        updatedAt INTEGER NOT NULL
       )
     ''');
 
@@ -326,6 +341,39 @@ class DatabaseService {
     final db = await database;
     final maps = await db.query('litters', orderBy: 'dateOfBirth DESC');
     return maps.map((m) => Litter.fromMap(m)).toList();
+  }
+
+  // ─── Contacts CRUD ─────────────────────────────────────────────
+
+  Future<void> insertContact(Contact contact) async {
+    final db = await database;
+    await db.insert('contacts', contact.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> updateContact(Contact contact) async {
+    final db = await database;
+    await db.update('contacts', contact.toMap(),
+        where: 'id = ?', whereArgs: [contact.id]);
+  }
+
+  Future<void> deleteContact(String id) async {
+    final db = await database;
+    await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<Contact?> getContact(String id) async {
+    final db = await database;
+    final maps =
+        await db.query('contacts', where: 'id = ?', whereArgs: [id]);
+    if (maps.isEmpty) return null;
+    return Contact.fromMap(maps.first);
+  }
+
+  Future<List<Contact>> getAllContacts() async {
+    final db = await database;
+    final maps = await db.query('contacts', orderBy: 'name ASC');
+    return maps.map((m) => Contact.fromMap(m)).toList();
   }
 
   // ─── Custom Field Definitions CRUD ──────────────────────────────

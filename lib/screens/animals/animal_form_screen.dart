@@ -23,7 +23,6 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   final _markingsController = TextEditingController();
   final _regNumberController = TextEditingController();
   final _microchipController = TextEditingController();
-  final _breederController = TextEditingController();
   final _weightController = TextEditingController();
   final _heightController = TextEditingController();
   final _notesController = TextEditingController();
@@ -33,6 +32,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   DateTime? _dateOfBirth;
   String? _selectedSireId;
   String? _selectedDamId;
+  String? _selectedBreederId;
+  String? _selectedOwnerId;
   bool _isEditing = false;
   final Map<String, dynamic> _customFieldValues = {};
   final Map<String, TextEditingController> _customFieldControllers = {};
@@ -62,7 +63,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _markingsController.text = animal.markings ?? '';
     _regNumberController.text = animal.registrationNumber ?? '';
     _microchipController.text = animal.microchipNumber ?? '';
-    _breederController.text = animal.breederName ?? '';
+    _selectedBreederId = animal.breederId;
+    _selectedOwnerId = animal.currentOwnerId;
     _weightController.text = animal.weight?.toString() ?? '';
     _heightController.text = animal.height?.toString() ?? '';
     _notesController.text = animal.notes ?? '';
@@ -93,7 +95,6 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _markingsController.dispose();
     _regNumberController.dispose();
     _microchipController.dispose();
-    _breederController.dispose();
     _weightController.dispose();
     _heightController.dispose();
     _notesController.dispose();
@@ -333,12 +334,30 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     prefixIcon: Icon(Icons.memory),
                   ),
                 ),
+
+
+                const SizedBox(height: 24),
+                _buildSectionTitle('Breeder & Owner'),
+                const SizedBox(height: 8),
+                _buildContactDropdown(
+                  label: 'Breeder',
+                  icon: Icons.person,
+                  value: _selectedBreederId,
+                  contacts: provider.contacts,
+                  onChanged: (v) => setState(() => _selectedBreederId = v),
+                  onAddNew: () => _showAddContactDialog(
+                    onCreated: (c) => setState(() => _selectedBreederId = c.id),
+                  ),
+                ),
                 const SizedBox(height: 12),
-                TextFormField(
-                  controller: _breederController,
-                  decoration: const InputDecoration(
-                    labelText: 'Breeder Name',
-                    prefixIcon: Icon(Icons.person),
+                _buildContactDropdown(
+                  label: 'Current Owner',
+                  icon: Icons.home,
+                  value: _selectedOwnerId,
+                  contacts: provider.contacts,
+                  onChanged: (v) => setState(() => _selectedOwnerId = v),
+                  onAddNew: () => _showAddContactDialog(
+                    onCreated: (c) => setState(() => _selectedOwnerId = c.id),
                   ),
                 ),
 
@@ -562,6 +581,87 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     }
   }
 
+  Widget _buildContactDropdown({
+    required String label,
+    required IconData icon,
+    required String? value,
+    required List<Contact> contacts,
+    required ValueChanged<String?> onChanged,
+    required VoidCallback onAddNew,
+  }) {
+    return Row(
+      children: [
+        Expanded(
+          child: DropdownButtonFormField<String>(
+            value: contacts.any((c) => c.id == value) ? value : null,
+            decoration: InputDecoration(
+              labelText: label,
+              prefixIcon: Icon(icon),
+            ),
+            items: [
+              const DropdownMenuItem(value: null, child: Text('Not set')),
+              ...contacts.map((c) => DropdownMenuItem(
+                    value: c.id,
+                    child: Text(c.displayName),
+                  )),
+            ],
+            onChanged: onChanged,
+          ),
+        ),
+        const SizedBox(width: 4),
+        IconButton(
+          icon: const Icon(Icons.person_add),
+          tooltip: 'Add new contact',
+          onPressed: onAddNew,
+        ),
+      ],
+    );
+  }
+
+  void _showAddContactDialog({required ValueChanged<Contact> onCreated}) {
+    final nameCtrl = TextEditingController();
+    final farmCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Contact'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameCtrl,
+              decoration: const InputDecoration(labelText: 'Name *'),
+              autofocus: true,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: farmCtrl,
+              decoration: const InputDecoration(labelText: 'Farm / Stud Name'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final name = nameCtrl.text.trim();
+              if (name.isEmpty) return;
+              final contact = Contact(name: name, farmName: farmCtrl.text.trim());
+              context.read<AnimalProvider>().addContact(contact);
+              Navigator.pop(ctx);
+              onCreated(contact);
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _saveAnimal() {
     if (!_formKey.currentState!.validate()) return;
 
@@ -633,9 +733,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       microchipNumber: _microchipController.text.trim().isEmpty
           ? null
           : _microchipController.text.trim(),
-      breederName: _breederController.text.trim().isEmpty
-          ? null
-          : _breederController.text.trim(),
+      breederId: _selectedBreederId,
+      currentOwnerId: _selectedOwnerId,
       weight: double.tryParse(_weightController.text),
       height: double.tryParse(_heightController.text),
       sireId: _selectedSireId,

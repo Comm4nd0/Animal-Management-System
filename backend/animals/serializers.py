@@ -1,5 +1,23 @@
 from rest_framework import serializers
-from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition
+from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
+
+
+class ContactSerializer(serializers.ModelSerializer):
+    """Serializer for contacts (breeders / owners)."""
+    class Meta:
+        model = Contact
+        fields = [
+            'id', 'name', 'farm_name', 'email', 'phone',
+            'address', 'prefix', 'notes', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class ContactSummarySerializer(serializers.ModelSerializer):
+    """Lightweight contact serializer for embedding in animal responses."""
+    class Meta:
+        model = Contact
+        fields = ['id', 'name', 'farm_name']
 
 
 class AnimalListSerializer(serializers.ModelSerializer):
@@ -7,6 +25,8 @@ class AnimalListSerializer(serializers.ModelSerializer):
     age_display = serializers.ReadOnlyField()
     sire_name = serializers.CharField(source='sire.name', read_only=True, default=None)
     dam_name = serializers.CharField(source='dam.name', read_only=True, default=None)
+    breeder_name = serializers.CharField(source='breeder.name', read_only=True, default=None)
+    owner_name = serializers.CharField(source='current_owner.name', read_only=True, default=None)
 
     class Meta:
         model = Animal
@@ -14,6 +34,7 @@ class AnimalListSerializer(serializers.ModelSerializer):
             'id', 'name', 'species', 'breed', 'sex', 'status',
             'date_of_birth', 'color', 'registration_number',
             'image', 'age_display', 'sire_name', 'dam_name',
+            'breeder', 'breeder_name', 'current_owner', 'owner_name',
             'created_at',
         ]
 
@@ -23,6 +44,8 @@ class AnimalDetailSerializer(serializers.ModelSerializer):
     age_display = serializers.ReadOnlyField()
     sire_name = serializers.CharField(source='sire.name', read_only=True, default=None)
     dam_name = serializers.CharField(source='dam.name', read_only=True, default=None)
+    breeder_detail = ContactSummarySerializer(source='breeder', read_only=True)
+    current_owner_detail = ContactSummarySerializer(source='current_owner', read_only=True)
     offspring_count = serializers.SerializerMethodField()
 
     class Meta:

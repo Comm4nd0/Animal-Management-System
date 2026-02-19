@@ -2,6 +2,40 @@ import uuid
 from django.db import models
 
 
+class Contact(models.Model):
+    """
+    A person or organisation that can be assigned as a breeder or
+    current owner of an animal.  Both roles draw from the same table.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(
+        'accounts.UserProfile',
+        on_delete=models.CASCADE,
+        related_name='contacts',
+        help_text='The user account this contact belongs to',
+    )
+    name = models.CharField(max_length=200)
+    farm_name = models.CharField(max_length=200, blank=True, default='')
+    email = models.EmailField(blank=True, default='')
+    phone = models.CharField(max_length=50, blank=True, default='')
+    address = models.TextField(blank=True, default='')
+    prefix = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text='Breeding prefix / affix',
+    )
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        if self.farm_name:
+            return f'{self.name} ({self.farm_name})'
+        return self.name
+
+
 class Animal(models.Model):
     """Represents a pedigree animal with lineage tracking."""
 
@@ -46,16 +80,30 @@ class Animal(models.Model):
         blank=True,
         related_name='dam_offspring',
     )
-    owner = models.ForeignKey(
+    account = models.ForeignKey(
         'accounts.UserProfile',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name='animals',
-        help_text='The user account that owns this animal',
+        help_text='The user account that owns this animal record',
     )
-    owner_name = models.CharField(max_length=200, blank=True, default='')
-    breeder_name = models.CharField(max_length=200, blank=True, default='')
+    current_owner = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='owned_animals',
+        help_text='The current owner / keeper of this animal',
+    )
+    breeder = models.ForeignKey(
+        Contact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bred_animals',
+        help_text='The breeder of this animal',
+    )
     image = models.ImageField(upload_to='animals/', null=True, blank=True)
     weight = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True,

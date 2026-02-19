@@ -7,3 +7,4 @@ export 'pedigree_node.dart';
 export 'breeding_suggestion.dart';
 export 'user_profile.dart';
 export 'custom_field_definition.dart';
+export 'contact.dart';

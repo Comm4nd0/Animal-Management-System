@@ -183,6 +183,18 @@ class HomeScreen extends StatelessWidget {
                 onTap: () => Navigator.pushNamed(context, '/litters'),
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.people,
+                label: 'Contacts',
+                onTap: () => Navigator.pushNamed(context, '/contacts'),
+              ),
+            ),
             const SizedBox(width: 8),
             Expanded(
               child: _ActionCard(
@@ -191,6 +203,8 @@ class HomeScreen extends StatelessWidget {
                 onTap: () => Navigator.pushNamed(context, '/custom-fields'),
               ),
             ),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()),
           ],
         ),
       ],

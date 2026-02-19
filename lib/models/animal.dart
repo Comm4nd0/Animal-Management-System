@@ -19,8 +19,8 @@ class Animal {
   final String? dnaProfileId;
   final String? sireId;
   final String? damId;
-  final String? ownerId;
-  final String? breederName;
+  final String? breederId;
+  final String? currentOwnerId;
   final String? imagePath;
   final double? weight;
   final double? height;
@@ -46,8 +46,8 @@ class Animal {
     this.dnaProfileId,
     this.sireId,
     this.damId,
-    this.ownerId,
-    this.breederName,
+    this.breederId,
+    this.currentOwnerId,
     this.imagePath,
     this.weight,
     this.height,
@@ -98,8 +98,8 @@ class Animal {
     String? dnaProfileId,
     String? sireId,
     String? damId,
-    String? ownerId,
-    String? breederName,
+    String? breederId,
+    String? currentOwnerId,
     String? imagePath,
     double? weight,
     double? height,
@@ -123,8 +123,8 @@ class Animal {
       dnaProfileId: dnaProfileId ?? this.dnaProfileId,
       sireId: sireId ?? this.sireId,
       damId: damId ?? this.damId,
-      ownerId: ownerId ?? this.ownerId,
-      breederName: breederName ?? this.breederName,
+      breederId: breederId ?? this.breederId,
+      currentOwnerId: currentOwnerId ?? this.currentOwnerId,
       imagePath: imagePath ?? this.imagePath,
       weight: weight ?? this.weight,
       height: height ?? this.height,
@@ -153,8 +153,8 @@ class Animal {
       'dnaProfileId': dnaProfileId,
       'sireId': sireId,
       'damId': damId,
-      'ownerId': ownerId,
-      'breederName': breederName,
+      'breederId': breederId,
+      'currentOwnerId': currentOwnerId,
       'imagePath': imagePath,
       'weight': weight,
       'height': height,
@@ -187,8 +187,8 @@ class Animal {
       dnaProfileId: map['dnaProfileId'] as String?,
       sireId: map['sireId'] as String?,
       damId: map['damId'] as String?,
-      ownerId: map['ownerId'] as String?,
-      breederName: map['breederName'] as String?,
+      breederId: map['breederId'] as String?,
+      currentOwnerId: map['currentOwnerId'] as String?,
       imagePath: map['imagePath'] as String?,
       weight: map['weight'] as double?,
       height: map['height'] as double?,

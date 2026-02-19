@@ -9,6 +9,7 @@ class AnimalProvider extends ChangeNotifier {
   final GeneticsService _genetics;
 
   List<Animal> _animals = [];
+  List<Contact> _contacts = [];
   List<HealthRecord> _healthRecords = [];
   List<BreedingRecord> _breedingRecords = [];
   List<Litter> _litters = [];
@@ -31,6 +32,7 @@ class AnimalProvider extends ChangeNotifier {
 
   List<Animal> get animals => _filteredAnimals;
   List<Animal> get allAnimals => _animals;
+  List<Contact> get contacts => _contacts;
   List<HealthRecord> get healthRecords => _healthRecords;
   List<BreedingRecord> get breedingRecords => _breedingRecords;
   List<Litter> get litters => _litters;
@@ -119,6 +121,7 @@ class AnimalProvider extends ChangeNotifier {
 
     try {
       _animals = await _db.getAllAnimals();
+      _contacts = await _db.getAllContacts();
       _breedingRecords = await _db.getActiveBreedings();
       _litters = await _db.getAllLitters();
       _stats = await _db.getAnimalStats();
@@ -162,6 +165,35 @@ class AnimalProvider extends ChangeNotifier {
     } catch (_) {
       return null;
     }
+  }
+
+  // ─── Contacts ───────────────────────────────────────────────
+
+  Contact? getContactById(String? id) {
+    if (id == null) return null;
+    try {
+      return _contacts.firstWhere((c) => c.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> addContact(Contact contact) async {
+    await _db.insertContact(contact);
+    _contacts = await _db.getAllContacts();
+    notifyListeners();
+  }
+
+  Future<void> updateContact(Contact contact) async {
+    await _db.updateContact(contact);
+    _contacts = await _db.getAllContacts();
+    notifyListeners();
+  }
+
+  Future<void> deleteContact(String id) async {
+    await _db.deleteContact(id);
+    _contacts = await _db.getAllContacts();
+    notifyListeners();
   }
 
   // ─── Health Records ───────────────────────────────────────────

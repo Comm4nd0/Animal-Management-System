@@ -254,9 +254,9 @@ class GeneticsService {
     }
 
     // Genetic diversity bonus for animals from different breeders
-    if (sire.breederName != null &&
-        dam.breederName != null &&
-        sire.breederName != dam.breederName) {
+    if (sire.breederId != null &&
+        dam.breederId != null &&
+        sire.breederId != dam.breederId) {
       pros.add('Different breeders - promotes genetic diversity');
       score += 5;
     }
