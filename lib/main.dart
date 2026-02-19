@@ -17,6 +17,8 @@ import 'screens/litters/litter_list_screen.dart';
 import 'screens/account/registration_screen.dart';
 import 'screens/account/account_screen.dart';
 import 'screens/contacts/contacts_screen.dart';
+import 'screens/genetics/coi_calculator_screen.dart';
+import 'screens/genetics/stud_matcher_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
 
 void main() {
@@ -117,6 +119,19 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/contacts':
         return MaterialPageRoute(
           builder: (_) => const ContactsScreen(),
+        );
+      case '/coi-calculator':
+        return MaterialPageRoute(
+          builder: (_) => const CoiCalculatorScreen(),
+        );
+      case '/stud-matcher':
+        return MaterialPageRoute(
+          builder: (_) => const StudMatcherScreen(),
+        );
+      case '/stud-matcher/preselected':
+        final studId = settings.arguments as String;
+        return MaterialPageRoute(
+          builder: (_) => StudMatcherScreen(preselectedStudId: studId),
         );
       case '/custom-fields':
         return MaterialPageRoute(

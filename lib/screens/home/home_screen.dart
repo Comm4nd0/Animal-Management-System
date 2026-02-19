@@ -204,6 +204,28 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.calculate,
+                label: 'COI Calc',
+                onTap: () => Navigator.pushNamed(context, '/coi-calculator'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.male,
+                label: 'Stud Matcher',
+                onTap: () => Navigator.pushNamed(context, '/stud-matcher'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(child: SizedBox()),
+            const SizedBox(width: 8),
             const Expanded(child: SizedBox()),
           ],
         ),

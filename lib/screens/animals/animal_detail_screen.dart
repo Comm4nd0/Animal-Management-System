@@ -80,6 +80,14 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                       title: Text('Breeding Suggestions'),
                     ),
                   ),
+                  if (animal.sex == Sex.male)
+                    const PopupMenuItem(
+                      value: 'stud_matcher',
+                      child: ListTile(
+                        leading: Icon(Icons.male),
+                        title: Text('Find Female Matches'),
+                      ),
+                    ),
                   const PopupMenuItem(
                     value: 'delete',
                     child: ListTile(
@@ -546,6 +554,10 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
         break;
       case 'breeding':
         Navigator.pushNamed(context, '/breeding/suggestions',
+            arguments: animal.id);
+        break;
+      case 'stud_matcher':
+        Navigator.pushNamed(context, '/stud-matcher/preselected',
             arguments: animal.id);
         break;
       case 'delete':
