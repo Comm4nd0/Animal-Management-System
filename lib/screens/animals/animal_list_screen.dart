@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
@@ -241,6 +242,11 @@ class _AnimalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final profilePath =
+        context.read<AnimalProvider>().getProfileImagePath(animal.id);
+    final hasProfileImage =
+        profilePath != null && File(profilePath).existsSync();
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
@@ -261,17 +267,10 @@ class _AnimalCard extends StatelessWidget {
                     : animal.sex == Sex.female
                         ? AppTheme.femaleColor.withValues(alpha: 0.15)
                         : Colors.grey.shade200,
-                child: animal.imagePath != null
-                    ? ClipOval(
-                        child: Image.asset(
-                          animal.imagePath!,
-                          width: 56,
-                          height: 56,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _buildSexIcon(),
-                        ),
-                      )
-                    : _buildSexIcon(),
+                backgroundImage: hasProfileImage
+                    ? FileImage(File(profilePath!))
+                    : null,
+                child: hasProfileImage ? null : _buildSexIcon(),
               ),
               const SizedBox(width: 12),
               Expanded(

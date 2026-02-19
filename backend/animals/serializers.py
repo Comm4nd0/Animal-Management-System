@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
+from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
 
 
 class ContactSerializer(serializers.ModelSerializer):
@@ -20,9 +20,19 @@ class ContactSummarySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'farm_name']
 
 
+class AnimalImageSerializer(serializers.ModelSerializer):
+    """Serializer for animal images."""
+    class Meta:
+        model = AnimalImage
+        fields = ['id', 'animal', 'image', 'caption', 'is_profile', 'uploaded_at']
+        read_only_fields = ['id', 'uploaded_at']
+        extra_kwargs = {'animal': {'required': False}}
+
+
 class AnimalListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for list views."""
     age_display = serializers.ReadOnlyField()
+    profile_image_url = serializers.SerializerMethodField()
     sire_name = serializers.CharField(source='sire.name', read_only=True, default=None)
     dam_name = serializers.CharField(source='dam.name', read_only=True, default=None)
     breeder_name = serializers.CharField(source='breeder.name', read_only=True, default=None)
@@ -33,15 +43,31 @@ class AnimalListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'species', 'breed', 'sex', 'status',
             'date_of_birth', 'color', 'registration_number',
-            'image', 'age_display', 'sire_name', 'dam_name',
+            'image', 'profile_image_url', 'age_display', 'sire_name', 'dam_name',
             'breeder', 'breeder_name', 'current_owner', 'owner_name',
             'created_at',
         ]
+
+    def get_profile_image_url(self, obj):
+        profile = obj.images.filter(is_profile=True).first()
+        if profile and profile.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(profile.image.url)
+            return profile.image.url
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
 
 class AnimalDetailSerializer(serializers.ModelSerializer):
     """Full serializer for detail/create/update views."""
     age_display = serializers.ReadOnlyField()
+    profile_image_url = serializers.SerializerMethodField()
+    images = AnimalImageSerializer(many=True, read_only=True)
     sire_name = serializers.CharField(source='sire.name', read_only=True, default=None)
     dam_name = serializers.CharField(source='dam.name', read_only=True, default=None)
     breeder_detail = ContactSummarySerializer(source='breeder', read_only=True)
@@ -52,6 +78,20 @@ class AnimalDetailSerializer(serializers.ModelSerializer):
         model = Animal
         fields = '__all__'
         read_only_fields = ['created_at', 'updated_at']
+
+    def get_profile_image_url(self, obj):
+        profile = obj.images.filter(is_profile=True).first()
+        if profile and profile.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(profile.image.url)
+            return profile.image.url
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
     def get_offspring_count(self, obj):
         return (

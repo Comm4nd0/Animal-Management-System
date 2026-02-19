@@ -6,10 +6,13 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 
-from .models import Animal, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
+from rest_framework.parsers import MultiPartParser, FormParser
+
+from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
 from .serializers import (
     AnimalListSerializer,
     AnimalDetailSerializer,
+    AnimalImageSerializer,
     HealthRecordSerializer,
     BreedingRecordSerializer,
     LitterSerializer,
@@ -208,6 +211,77 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
         serializer = AnimalListSerializer(animals, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='images',
+            parser_classes=[MultiPartParser, FormParser])
+    def images(self, request, pk=None):
+        """
+        GET: List all images for this animal.
+        POST: Upload a new image (multipart/form-data with 'image' field).
+        """
+        animal = self.get_object()
+
+        if request.method == 'GET':
+            images = AnimalImage.objects.filter(animal=animal)
+            serializer = AnimalImageSerializer(
+                images, many=True, context={'request': request}
+            )
+            return Response(serializer.data)
+
+        # POST: upload image
+        serializer = AnimalImageSerializer(
+            data=request.data, context={'request': request}
+        )
+        serializer.is_valid(raise_exception=True)
+        # If this is the first image, make it the profile
+        is_first = not AnimalImage.objects.filter(animal=animal).exists()
+        serializer.save(
+            animal=animal,
+            is_profile=request.data.get('is_profile', 'false').lower() == 'true' or is_first,
+        )
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='set-profile-image')
+    def set_profile_image(self, request, pk=None):
+        """Set an existing image as the profile image for this animal."""
+        animal = self.get_object()
+        image_id = request.data.get('image_id')
+        if not image_id:
+            return Response(
+                {'error': 'image_id is required'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            image = AnimalImage.objects.get(pk=image_id, animal=animal)
+        except AnimalImage.DoesNotExist:
+            return Response(
+                {'error': 'Image not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        # Clear existing profile and set new one
+        AnimalImage.objects.filter(animal=animal, is_profile=True).update(is_profile=False)
+        image.is_profile = True
+        image.save(update_fields=['is_profile'])
+        return Response(AnimalImageSerializer(image, context={'request': request}).data)
+
+    @action(detail=True, methods=['delete'], url_path='images/(?P<image_id>[^/.]+)')
+    def delete_image(self, request, pk=None, image_id=None):
+        """Delete a specific image from this animal."""
+        animal = self.get_object()
+        try:
+            image = AnimalImage.objects.get(pk=image_id, animal=animal)
+        except AnimalImage.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        was_profile = image.is_profile
+        image.image.delete(save=False)
+        image.delete()
+        # If deleted image was profile, promote the next one
+        if was_profile:
+            next_img = AnimalImage.objects.filter(animal=animal).first()
+            if next_img:
+                next_img.is_profile = True
+                next_img.save(update_fields=['is_profile'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=['post'], url_path='import')
     def bulk_import(self, request):

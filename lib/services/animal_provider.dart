@@ -1,4 +1,7 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 import '../models/models.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
@@ -22,6 +25,9 @@ class AnimalProvider extends ChangeNotifier {
   String? _selectedSpeciesFilter;
   String? _selectedBreedFilter;
   Map<String, String> _customFieldFilters = {};
+  List<AnimalImage> _animalImages = [];
+  // Cache of profile image paths keyed by animal ID
+  final Map<String, String?> _profileImageCache = {};
 
   // ─── Account / Tier ────────────────────────────────────────────
   UserProfile? _userProfile;
@@ -48,6 +54,7 @@ class AnimalProvider extends ChangeNotifier {
   String? get selectedBreedFilter => _selectedBreedFilter;
   Map<String, String> get customFieldFilters => _customFieldFilters;
   GeneticsService get geneticsService => _genetics;
+  List<AnimalImage> get animalImages => _animalImages;
   UserProfile? get userProfile => _userProfile;
 
   // ─── Tier Helpers ──────────────────────────────────────────────
@@ -129,6 +136,7 @@ class AnimalProvider extends ChangeNotifier {
       _litters = await _db.getAllLitters();
       _stats = await _db.getAnimalStats();
       _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+      await loadProfileImageCache();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -249,6 +257,103 @@ class AnimalProvider extends ChangeNotifier {
 
   Future<List<HealthRecord>> getUpcomingHealthReminders() async {
     return await _db.getUpcomingHealthRecords();
+  }
+
+  // ─── Animal Images ──────────────────────────────────────────
+
+  Future<void> loadAnimalImages(String animalId) async {
+    _animalImages = await _db.getAnimalImages(animalId);
+    notifyListeners();
+  }
+
+  /// Returns the cached profile image path for an animal, or null.
+  /// Call [loadProfileImageCache] first to populate.
+  String? getProfileImagePath(String animalId) {
+    return _profileImageCache[animalId];
+  }
+
+  /// Pre-loads profile image paths for all loaded animals.
+  Future<void> loadProfileImageCache() async {
+    for (final animal in _animals) {
+      if (!_profileImageCache.containsKey(animal.id)) {
+        final img = await _db.getProfileImage(animal.id);
+        _profileImageCache[animal.id] = img?.imagePath;
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Picks an image file, copies it to app storage, and saves the record.
+  /// Returns the created [AnimalImage], or null if no file was copied.
+  Future<AnimalImage?> addAnimalImage(
+    String animalId,
+    File sourceFile, {
+    bool isProfile = false,
+    String caption = '',
+  }) async {
+    // Copy to app documents directory for persistence
+    final appDir = await getApplicationDocumentsDirectory();
+    final imagesDir = Directory(p.join(appDir.path, 'animal_images'));
+    if (!await imagesDir.exists()) {
+      await imagesDir.create(recursive: true);
+    }
+    final ext = p.extension(sourceFile.path);
+    final fileName =
+        '${animalId}_${DateTime.now().millisecondsSinceEpoch}$ext';
+    final savedFile = await sourceFile.copy(p.join(imagesDir.path, fileName));
+
+    // If no images exist yet, make this the profile
+    final existing = await _db.getAnimalImages(animalId);
+    final shouldBeProfile = isProfile || existing.isEmpty;
+
+    final image = AnimalImage(
+      animalId: animalId,
+      imagePath: savedFile.path,
+      caption: caption,
+      isProfile: shouldBeProfile,
+    );
+    await _db.insertAnimalImage(image);
+
+    // Update caches
+    _animalImages = await _db.getAnimalImages(animalId);
+    if (shouldBeProfile) {
+      _profileImageCache[animalId] = savedFile.path;
+    }
+    notifyListeners();
+    return image;
+  }
+
+  Future<void> deleteAnimalImage(String imageId, String animalId) async {
+    // Find the image to delete the file
+    final image = _animalImages.firstWhere(
+      (i) => i.id == imageId,
+      orElse: () => AnimalImage(animalId: animalId, imagePath: ''),
+    );
+    // Delete the file from disk
+    if (image.imagePath.isNotEmpty) {
+      final file = File(image.imagePath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+    await _db.deleteAnimalImage(imageId);
+    _animalImages = await _db.getAnimalImages(animalId);
+
+    // Update profile cache
+    final profile = _animalImages.where((i) => i.isProfile).toList();
+    _profileImageCache[animalId] =
+        profile.isNotEmpty ? profile.first.imagePath : null;
+    notifyListeners();
+  }
+
+  Future<void> setProfileImage(String animalId, String imageId) async {
+    await _db.setProfileImage(animalId, imageId);
+    _animalImages = await _db.getAnimalImages(animalId);
+
+    final profile = _animalImages.where((i) => i.isProfile).toList();
+    _profileImageCache[animalId] =
+        profile.isNotEmpty ? profile.first.imagePath : null;
+    notifyListeners();
   }
 
   // ─── Breeding Records ────────────────────────────────────────

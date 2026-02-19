@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
@@ -20,9 +22,11 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AnimalProvider>().loadHealthRecords(widget.animalId);
+      final p = context.read<AnimalProvider>();
+      p.loadHealthRecords(widget.animalId);
+      p.loadAnimalImages(widget.animalId);
     });
   }
 
@@ -105,8 +109,10 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
               TabBar(
                 controller: _tabController,
                 labelColor: AppTheme.primaryColor,
+                isScrollable: true,
                 tabs: const [
                   Tab(text: 'Info'),
+                  Tab(text: 'Photos'),
                   Tab(text: 'Health'),
                   Tab(text: 'Lineage'),
                   Tab(text: 'Notes'),
@@ -117,6 +123,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                   controller: _tabController,
                   children: [
                     _buildInfoTab(context, animal, sire, dam),
+                    _buildPhotosTab(context, animal, provider),
                     _buildHealthTab(context, provider),
                     _buildLineageTab(context, animal, sire, dam, provider),
                     _buildNotesTab(context, animal),
@@ -131,6 +138,11 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
   }
 
   Widget _buildHeader(BuildContext context, Animal animal) {
+    final provider = context.read<AnimalProvider>();
+    final profilePath = provider.getProfileImagePath(animal.id);
+    final hasProfileImage =
+        profilePath != null && File(profilePath).existsSync();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -141,17 +153,27 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
               : Colors.grey.shade100,
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 36,
-            backgroundColor: animal.sex == Sex.male
-                ? AppTheme.maleColor.withValues(alpha: 0.2)
-                : AppTheme.femaleColor.withValues(alpha: 0.2),
-            child: Icon(
-              animal.sex == Sex.male ? Icons.male : Icons.female,
-              size: 36,
-              color: animal.sex == Sex.male
-                  ? AppTheme.maleColor
-                  : AppTheme.femaleColor,
+          GestureDetector(
+            onTap: hasProfileImage
+                ? () => _showFullImage(context, profilePath!)
+                : null,
+            child: CircleAvatar(
+              radius: 36,
+              backgroundColor: animal.sex == Sex.male
+                  ? AppTheme.maleColor.withValues(alpha: 0.2)
+                  : AppTheme.femaleColor.withValues(alpha: 0.2),
+              backgroundImage: hasProfileImage
+                  ? FileImage(File(profilePath!))
+                  : null,
+              child: hasProfileImage
+                  ? null
+                  : Icon(
+                      animal.sex == Sex.male ? Icons.male : Icons.female,
+                      size: 36,
+                      color: animal.sex == Sex.male
+                          ? AppTheme.maleColor
+                          : AppTheme.femaleColor,
+                    ),
             ),
           ),
           const SizedBox(width: 16),
@@ -424,6 +446,135 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     );
   }
 
+  Widget _buildPhotosTab(
+    BuildContext context,
+    Animal animal,
+    AnimalProvider provider,
+  ) {
+    final images = provider.animalImages;
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ElevatedButton.icon(
+                onPressed: () => _addPhoto(animal.id, ImageSource.gallery),
+                icon: const Icon(Icons.photo_library),
+                label: const Text('Add from Gallery'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () => _addPhoto(animal.id, ImageSource.camera),
+                icon: const Icon(Icons.camera_alt),
+                label: const Text('Take Photo'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: images.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.photo_library,
+                          size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      const Text('No photos yet'),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Add photos of this animal',
+                        style: TextStyle(color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.all(8),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                  ),
+                  itemCount: images.length,
+                  itemBuilder: (context, index) {
+                    final img = images[index];
+                    return _PhotoTile(
+                      image: img,
+                      onTap: () => _showFullImage(context, img.imagePath),
+                      onSetProfile: () => provider.setProfileImage(
+                          animal.id, img.id),
+                      onDelete: () => _confirmDeleteImage(
+                          img.id, animal.id, provider),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _addPhoto(String animalId, ImageSource source) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
+    if (picked == null) return;
+    final provider = context.read<AnimalProvider>();
+    await provider.addAnimalImage(animalId, File(picked.path));
+  }
+
+  void _showFullImage(BuildContext context, String imagePath) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              child: Image.file(File(imagePath)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeleteImage(
+      String imageId, String animalId, AnimalProvider provider) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Photo'),
+        content: const Text('Are you sure you want to delete this photo?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              provider.deleteAnimalImage(imageId, animalId);
+              Navigator.pop(ctx);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSection(String title, List<Widget> children) {
     if (children.isEmpty) return const SizedBox.shrink();
     return Card(
@@ -585,6 +736,102 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A single photo tile in the gallery grid with context menu.
+class _PhotoTile extends StatelessWidget {
+  final AnimalImage image;
+  final VoidCallback onTap;
+  final VoidCallback onSetProfile;
+  final VoidCallback onDelete;
+
+  const _PhotoTile({
+    required this.image,
+    required this.onTap,
+    required this.onSetProfile,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final file = File(image.imagePath);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: file.existsSync()
+                ? Image.file(file, fit: BoxFit.cover)
+                : Container(
+                    color: Colors.grey.shade300,
+                    child: const Icon(Icons.broken_image),
+                  ),
+          ),
+          // Profile badge
+          if (image.isProfile)
+            Positioned(
+              top: 4,
+              left: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Profile',
+                  style: TextStyle(color: Colors.white, fontSize: 10),
+                ),
+              ),
+            ),
+          // Action menu
+          Positioned(
+            top: 2,
+            right: 2,
+            child: PopupMenuButton<String>(
+              iconSize: 20,
+              icon: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: Colors.black38,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.more_vert,
+                    color: Colors.white, size: 16),
+              ),
+              onSelected: (value) {
+                if (value == 'profile') onSetProfile();
+                if (value == 'delete') onDelete();
+              },
+              itemBuilder: (_) => [
+                if (!image.isProfile)
+                  const PopupMenuItem(
+                    value: 'profile',
+                    child: ListTile(
+                      leading: Icon(Icons.star),
+                      title: Text('Set as Profile'),
+                      dense: true,
+                    ),
+                  ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: ListTile(
+                    leading: Icon(Icons.delete, color: Colors.red),
+                    title:
+                        Text('Delete', style: TextStyle(color: Colors.red)),
+                    dense: true,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

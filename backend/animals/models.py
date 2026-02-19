@@ -405,6 +405,33 @@ class Litter(models.Model):
         return self.total_puppies - self.stillborn
 
 
+class AnimalImage(models.Model):
+    """An image associated with an animal. One can be marked as profile image."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    animal = models.ForeignKey(
+        Animal, on_delete=models.CASCADE, related_name='images'
+    )
+    image = models.ImageField(upload_to='animal_images/')
+    caption = models.CharField(max_length=200, blank=True, default='')
+    is_profile = models.BooleanField(default=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_profile', '-uploaded_at']
+
+    def __str__(self):
+        label = 'Profile' if self.is_profile else 'Photo'
+        return f'{label} - {self.animal.name}'
+
+    def save(self, *args, **kwargs):
+        if self.is_profile:
+            AnimalImage.objects.filter(
+                animal=self.animal, is_profile=True
+            ).exclude(pk=self.pk).update(is_profile=False)
+        super().save(*args, **kwargs)
+
+
 class CustomFieldDefinition(models.Model):
     """
     Defines a custom field that a user can create for their animals.

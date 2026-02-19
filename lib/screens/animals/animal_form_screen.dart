@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/constants.dart';
@@ -35,6 +37,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   String? _selectedBreederId;
   String? _selectedOwnerId;
   bool _isEditing = false;
+  File? _pickedImageFile;
   final Map<String, dynamic> _customFieldValues = {};
   final Map<String, TextEditingController> _customFieldControllers = {};
 
@@ -388,6 +391,11 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                 ],
 
                 const SizedBox(height: 24),
+                _buildSectionTitle('Profile Photo'),
+                const SizedBox(height: 8),
+                _buildImagePicker(provider),
+
+                const SizedBox(height: 24),
                 _buildSectionTitle('Notes'),
                 const SizedBox(height: 8),
                 TextFormField(
@@ -566,6 +574,96 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                 : null,
           ),
         );
+    }
+  }
+
+  Widget _buildImagePicker(AnimalProvider provider) {
+    // Show existing profile image for editing, or picked image for new
+    String? existingProfilePath;
+    if (_isEditing && widget.animalId != null) {
+      existingProfilePath = provider.getProfileImagePath(widget.animalId!);
+    }
+    final hasImage = _pickedImageFile != null || existingProfilePath != null;
+
+    return Center(
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: _pickImage,
+            child: CircleAvatar(
+              radius: 56,
+              backgroundColor: Colors.grey.shade200,
+              backgroundImage: _pickedImageFile != null
+                  ? FileImage(_pickedImageFile!)
+                  : existingProfilePath != null
+                      ? FileImage(File(existingProfilePath))
+                      : null,
+              child: hasImage
+                  ? null
+                  : Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_a_photo,
+                            size: 32, color: Colors.grey.shade500),
+                        const SizedBox(height: 4),
+                        Text('Add Photo',
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade600)),
+                      ],
+                    ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton.icon(
+                onPressed: _pickImage,
+                icon: const Icon(Icons.photo_library, size: 18),
+                label: Text(hasImage ? 'Change' : 'Gallery'),
+              ),
+              TextButton.icon(
+                onPressed: _takePhoto,
+                icon: const Icon(Icons.camera_alt, size: 18),
+                label: const Text('Camera'),
+              ),
+              if (hasImage)
+                TextButton.icon(
+                  onPressed: () => setState(() => _pickedImageFile = null),
+                  icon: Icon(Icons.clear, size: 18, color: Colors.red.shade400),
+                  label: Text('Remove',
+                      style: TextStyle(color: Colors.red.shade400)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
+    if (picked != null) {
+      setState(() => _pickedImageFile = File(picked.path));
+    }
+  }
+
+  Future<void> _takePhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
+    if (picked != null) {
+      setState(() => _pickedImageFile = File(picked.path));
     }
   }
 
@@ -768,6 +866,15 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
         ),
       );
       return;
+    }
+
+    // Save profile image if one was picked
+    if (_pickedImageFile != null) {
+      await provider.addAnimalImage(
+        animal.id,
+        _pickedImageFile!,
+        isProfile: true,
+      );
     }
 
     if (!mounted) return;

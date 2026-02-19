@@ -19,8 +19,9 @@ class DatabaseService {
     final path = join(dbPath, 'pedigree_manager.db');
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -162,6 +163,30 @@ class DatabaseService {
         'CREATE INDEX idx_breeding_dam ON breeding_records (damId)');
     await db.execute(
         'CREATE UNIQUE INDEX idx_custom_field_key ON custom_field_definitions (fieldKey)');
+
+    await _createAnimalImagesTable(db);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await _createAnimalImagesTable(db);
+    }
+  }
+
+  Future<void> _createAnimalImagesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS animal_images (
+        id TEXT PRIMARY KEY,
+        animalId TEXT NOT NULL,
+        imagePath TEXT NOT NULL,
+        caption TEXT DEFAULT '',
+        isProfile INTEGER DEFAULT 0,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (animalId) REFERENCES animals (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_animal_images_animal ON animal_images (animalId)');
   }
 
   // ─── Animal CRUD ────────────────────────────────────────────────
@@ -401,6 +426,65 @@ class DatabaseService {
     final maps = await db.query('custom_field_definitions',
         orderBy: 'displayOrder ASC, name ASC');
     return maps.map((m) => CustomFieldDefinition.fromMap(m)).toList();
+  }
+
+  // ─── Animal Images CRUD ──────────────────────────────────────────
+
+  Future<void> insertAnimalImage(AnimalImage image) async {
+    final db = await database;
+    if (image.isProfile) {
+      // Clear existing profile for this animal
+      await db.update(
+        'animal_images',
+        {'isProfile': 0},
+        where: 'animalId = ? AND isProfile = 1',
+        whereArgs: [image.animalId],
+      );
+    }
+    await db.insert('animal_images', image.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteAnimalImage(String id) async {
+    final db = await database;
+    await db.delete('animal_images', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<AnimalImage>> getAnimalImages(String animalId) async {
+    final db = await database;
+    final maps = await db.query('animal_images',
+        where: 'animalId = ?',
+        whereArgs: [animalId],
+        orderBy: 'isProfile DESC, createdAt DESC');
+    return maps.map((m) => AnimalImage.fromMap(m)).toList();
+  }
+
+  Future<AnimalImage?> getProfileImage(String animalId) async {
+    final db = await database;
+    final maps = await db.query('animal_images',
+        where: 'animalId = ? AND isProfile = 1',
+        whereArgs: [animalId],
+        limit: 1);
+    if (maps.isEmpty) return null;
+    return AnimalImage.fromMap(maps.first);
+  }
+
+  Future<void> setProfileImage(String animalId, String imageId) async {
+    final db = await database;
+    // Clear existing profile
+    await db.update(
+      'animal_images',
+      {'isProfile': 0},
+      where: 'animalId = ?',
+      whereArgs: [animalId],
+    );
+    // Set new profile
+    await db.update(
+      'animal_images',
+      {'isProfile': 1},
+      where: 'id = ? AND animalId = ?',
+      whereArgs: [imageId, animalId],
+    );
   }
 
   // ─── Stats ─────────────────────────────────────────────────────
