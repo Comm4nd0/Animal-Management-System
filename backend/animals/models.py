@@ -1,4 +1,5 @@
 import uuid
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -130,6 +131,101 @@ class Animal(models.Model):
 
     def __str__(self):
         return f'{self.name} ({self.breed})'
+
+    def clean(self):
+        """Validate pedigree integrity before saving."""
+        errors = {}
+
+        # Self-reference
+        if self.sire_id and self.sire_id == self.pk:
+            errors['sire'] = 'An animal cannot be its own sire.'
+        if self.dam_id and self.dam_id == self.pk:
+            errors['dam'] = 'An animal cannot be its own dam.'
+
+        # Same animal as both parents
+        if self.sire_id and self.dam_id and self.sire_id == self.dam_id:
+            errors['dam'] = 'Sire and dam cannot be the same animal.'
+
+        # Sex mismatch
+        if self.sire_id:
+            try:
+                sire = Animal.objects.get(pk=self.sire_id)
+                if sire.sex == self.Sex.FEMALE:
+                    errors['sire'] = f'The sire ({sire.name}) is female.'
+            except Animal.DoesNotExist:
+                pass
+        if self.dam_id:
+            try:
+                dam = Animal.objects.get(pk=self.dam_id)
+                if dam.sex == self.Sex.MALE:
+                    errors['dam'] = f'The dam ({dam.name}) is male.'
+            except Animal.DoesNotExist:
+                pass
+
+        # Date-of-birth checks
+        if self.date_of_birth:
+            if self.sire_id:
+                try:
+                    sire = Animal.objects.get(pk=self.sire_id)
+                    if sire.date_of_birth and sire.date_of_birth >= self.date_of_birth:
+                        errors['sire'] = (
+                            f'The sire ({sire.name}) was born on or after this animal.'
+                        )
+                except Animal.DoesNotExist:
+                    pass
+            if self.dam_id:
+                try:
+                    dam = Animal.objects.get(pk=self.dam_id)
+                    if dam.date_of_birth and dam.date_of_birth >= self.date_of_birth:
+                        errors['dam'] = (
+                            f'The dam ({dam.name}) was born on or after this animal.'
+                        )
+                except Animal.DoesNotExist:
+                    pass
+
+            if self.date_of_death and self.date_of_death < self.date_of_birth:
+                errors['date_of_death'] = 'Date of death cannot be before date of birth.'
+
+        # Circular ancestry — walk up the ancestor chain.
+        # Bounded by pedigree depth, not total animals, so safe at scale.
+        for field_name, parent_id in [('sire', self.sire_id), ('dam', self.dam_id)]:
+            if parent_id and parent_id != self.pk:
+                if self._has_circular_ancestry(parent_id):
+                    errors[field_name] = (
+                        'Setting this parent would create a circular pedigree.'
+                    )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def _has_circular_ancestry(self, start_id, max_depth=30):
+        """Walk ancestors from start_id looking for self.pk."""
+        visited = set()
+        queue = [start_id]
+        depth = 0
+        while queue and depth < max_depth:
+            next_queue = []
+            for current_id in queue:
+                if current_id == self.pk:
+                    return True
+                if current_id in visited:
+                    continue
+                visited.add(current_id)
+                try:
+                    ancestor = Animal.objects.only('sire_id', 'dam_id').get(pk=current_id)
+                    if ancestor.sire_id:
+                        next_queue.append(ancestor.sire_id)
+                    if ancestor.dam_id:
+                        next_queue.append(ancestor.dam_id)
+                except Animal.DoesNotExist:
+                    pass
+            queue = next_queue
+            depth += 1
+        return False
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     @property
     def offspring(self):

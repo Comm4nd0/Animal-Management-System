@@ -19,6 +19,7 @@ import 'screens/account/account_screen.dart';
 import 'screens/contacts/contacts_screen.dart';
 import 'screens/genetics/coi_calculator_screen.dart';
 import 'screens/genetics/stud_matcher_screen.dart';
+import 'screens/data_audit/data_audit_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
 
 void main() {
@@ -136,6 +137,10 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/custom-fields':
         return MaterialPageRoute(
           builder: (_) => const CustomFieldsScreen(),
+        );
+      case '/data-audit':
+        return MaterialPageRoute(
+          builder: (_) => const DataAuditScreen(),
         );
       default:
         return MaterialPageRoute(

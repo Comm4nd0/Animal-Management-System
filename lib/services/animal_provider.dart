@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
+import 'pedigree_validator.dart';
 
 /// Central state management provider for all animal-related data.
 class AnimalProvider extends ChangeNotifier {
   final DatabaseService _db;
   final GeneticsService _genetics;
+  final PedigreeValidator _validator;
 
   List<Animal> _animals = [];
   List<Contact> _contacts = [];
@@ -24,9 +26,10 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Account / Tier ────────────────────────────────────────────
   UserProfile? _userProfile;
 
-  AnimalProvider({DatabaseService? db, GeneticsService? genetics})
+  AnimalProvider({DatabaseService? db, GeneticsService? genetics, PedigreeValidator? validator})
       : _db = db ?? DatabaseService(),
-        _genetics = genetics ?? GeneticsService();
+        _genetics = genetics ?? GeneticsService(),
+        _validator = validator ?? PedigreeValidator();
 
   // ─── Getters ───────────────────────────────────────────────────
 
@@ -137,19 +140,53 @@ class AnimalProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── Pedigree Validation ────────────────────────────────────
+
+  /// Validates that the given animal's parentage is valid (no cycles,
+  /// sex mismatches, date issues, etc.). Returns null if valid, or
+  /// an error message string.
+  Future<String?> validateAnimalParentage(Animal animal) async {
+    return _validator.validateParentage(
+      animalId: animal.id,
+      sireId: animal.sireId,
+      damId: animal.damId,
+      dateOfBirth: animal.dateOfBirth,
+      allAnimals: _animals,
+    );
+  }
+
+  /// Runs a full data audit on all animals. Returns a list of issues.
+  Future<List<DataIssue>> auditData({
+    void Function(int processed, int total)? onProgress,
+  }) async {
+    return _validator.auditAll(onProgress: onProgress);
+  }
+
   // ─── Animal Operations ────────────────────────────────────────
 
-  Future<void> addAnimal(Animal animal) async {
+  /// Adds an animal after validating pedigree integrity.
+  /// Returns null on success, or an error message string.
+  Future<String?> addAnimal(Animal animal) async {
+    final error = await validateAnimalParentage(animal);
+    if (error != null) return error;
+
     await _db.insertAnimal(animal);
     _animals = await _db.getAllAnimals();
     _stats = await _db.getAnimalStats();
     notifyListeners();
+    return null;
   }
 
-  Future<void> updateAnimal(Animal animal) async {
+  /// Updates an animal after validating pedigree integrity.
+  /// Returns null on success, or an error message string.
+  Future<String?> updateAnimal(Animal animal) async {
+    final error = await validateAnimalParentage(animal);
+    if (error != null) return error;
+
     await _db.updateAnimal(animal);
     _animals = await _db.getAllAnimals();
     notifyListeners();
+    return null;
   }
 
   Future<void> deleteAnimal(String id) async {

@@ -224,7 +224,13 @@ class HomeScreen extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            const Expanded(child: SizedBox()),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.health_and_safety,
+                label: 'Data Audit',
+                onTap: () => Navigator.pushNamed(context, '/data-audit'),
+              ),
+            ),
             const SizedBox(width: 8),
             const Expanded(child: SizedBox()),
           ],

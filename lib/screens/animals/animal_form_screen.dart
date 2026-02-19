@@ -662,7 +662,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     );
   }
 
-  void _saveAnimal() {
+  Future<void> _saveAnimal() async {
     if (!_formKey.currentState!.validate()) return;
 
     final provider = context.read<AnimalProvider>();
@@ -745,12 +745,32 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       customFields: customFields,
     );
 
+    String? validationError;
     if (_isEditing) {
-      provider.updateAnimal(animal);
+      validationError = await provider.updateAnimal(animal);
     } else {
-      provider.addAnimal(animal);
+      validationError = await provider.addAnimal(animal);
     }
 
+    if (validationError != null) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Pedigree Error'),
+          content: Text(validationError!),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     Navigator.pop(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

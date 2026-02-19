@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import models as db_models
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -106,10 +107,22 @@ class AnimalViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Automatically assign the animal to the authenticated user."""
         profile = _get_user_profile(self.request)
-        if profile is not None:
-            serializer.save(account=profile)
-        else:
+        try:
+            if profile is not None:
+                serializer.save(account=profile)
+            else:
+                serializer.save()
+        except DjangoValidationError as e:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages})
+
+    def perform_update(self, serializer):
+        """Validate pedigree integrity on update."""
+        try:
             serializer.save()
+        except DjangoValidationError as e:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(e.message_dict if hasattr(e, 'message_dict') else {'detail': e.messages})
 
     @action(detail=True, methods=['get'])
     def offspring(self, request, pk=None):
