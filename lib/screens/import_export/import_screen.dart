@@ -1,12 +1,12 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/animal_provider.dart';
 import '../../services/import_export_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/file_helper.dart' as file_helper;
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -18,7 +18,8 @@ class ImportScreen extends StatefulWidget {
 class _ImportScreenState extends State<ImportScreen> {
   final _importService = ImportExportService();
 
-  String? _selectedFilePath;
+  // The picked file's raw text content (works on both web and native)
+  String? _fileContent;
   String? _selectedFileName;
   int? _fileSize;
   bool _isImporting = false;
@@ -30,21 +31,34 @@ class _ImportScreenState extends State<ImportScreen> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['csv', 'json'],
+      withData: true, // Required for web — gets bytes directly
     );
 
-    if (result != null && result.files.single.path != null) {
-      final file = File(result.files.single.path!);
-      setState(() {
-        _selectedFilePath = file.path;
-        _selectedFileName = result.files.single.name;
-        _fileSize = result.files.single.size;
-        _result = null;
-      });
+    if (result == null || result.files.isEmpty) return;
+    final pickedFile = result.files.single;
+
+    // Get file content as string
+    String content;
+    if (pickedFile.bytes != null) {
+      // Web (and mobile when withData: true)
+      content = file_helper.bytesToString(pickedFile.bytes!);
+    } else if (pickedFile.path != null) {
+      // Native fallback — read from disk
+      content = await file_helper.readFileContent(pickedFile.path!);
+    } else {
+      return;
     }
+
+    setState(() {
+      _fileContent = content;
+      _selectedFileName = pickedFile.name;
+      _fileSize = pickedFile.size;
+      _result = null;
+    });
   }
 
   Future<void> _startImport() async {
-    if (_selectedFilePath == null) return;
+    if (_fileContent == null || _selectedFileName == null) return;
 
     setState(() {
       _isImporting = true;
@@ -53,24 +67,27 @@ class _ImportScreenState extends State<ImportScreen> {
       _result = null;
     });
 
-    final isJson = _selectedFilePath!.toLowerCase().endsWith('.json');
+    final isJson = _selectedFileName!.toLowerCase().endsWith('.json');
 
     ImportResult result;
     if (isJson) {
-      result = await _importService.importJson(
-        _selectedFilePath!,
+      result = await _importService.importJsonFromContent(
+        _fileContent!,
         onProgress: (p, t) {
           if (mounted) setState(() { _processed = p; _total = t; });
         },
       );
     } else {
-      result = await _importService.importCsv(
-        _selectedFilePath!,
+      result = await _importService.importCsvFromContent(
+        _fileContent!,
         onProgress: (p, t) {
           if (mounted) setState(() { _processed = p; _total = t; });
         },
       );
     }
+
+    // Free the raw content from memory now that import is done
+    _fileContent = null;
 
     // Reload the animal list in the provider
     if (mounted) {
@@ -80,6 +97,19 @@ class _ImportScreenState extends State<ImportScreen> {
         _result = result;
       });
     }
+  }
+
+  Future<void> _downloadTemplate() async {
+    final content = _importService.generateTemplateContent();
+    await file_helper.downloadFile(content, 'animal_import_template.csv');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(kIsWeb
+            ? 'Template downloaded'
+            : 'Template saved to documents'),
+      ),
+    );
   }
 
   String _formatFileSize(int bytes) {
@@ -93,21 +123,28 @@ class _ImportScreenState extends State<ImportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final hasFile = _fileContent != null;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Import Animals')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildInfoCard(),
-            const SizedBox(height: 16),
-            _buildFileSelection(),
-            if (_selectedFilePath != null && !_isImporting && _result == null)
-              _buildImportButton(),
-            if (_isImporting) _buildProgress(),
-            if (_result != null) _buildResult(),
-          ],
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildInfoCard(),
+                const SizedBox(height: 16),
+                _buildFileSelection(hasFile),
+                if (hasFile && !_isImporting && _result == null)
+                  _buildImportButton(),
+                if (_isImporting) _buildProgress(),
+                if (_result != null) _buildResult(),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -156,15 +193,7 @@ class _ImportScreenState extends State<ImportScreen> {
     );
   }
 
-  Future<void> _downloadTemplate() async {
-    final path = await _importService.generateTemplate();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Template saved to: $path')),
-    );
-  }
-
-  Widget _buildFileSelection() {
+  Widget _buildFileSelection(bool hasFile) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -178,7 +207,7 @@ class _ImportScreenState extends State<ImportScreen> {
                   ),
             ),
             const SizedBox(height: 12),
-            if (_selectedFilePath == null)
+            if (!hasFile)
               SizedBox(
                 width: double.infinity,
                 height: 120,
@@ -197,7 +226,9 @@ class _ImportScreenState extends State<ImportScreen> {
                           size: 36, color: Colors.grey.shade500),
                       const SizedBox(height: 8),
                       Text(
-                        'Tap to select a CSV or JSON file',
+                        kIsWeb
+                            ? 'Click to select a CSV or JSON file'
+                            : 'Tap to select a CSV or JSON file',
                         style: TextStyle(color: Colors.grey.shade600),
                       ),
                     ],
@@ -207,7 +238,8 @@ class _ImportScreenState extends State<ImportScreen> {
             else
               ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  backgroundColor:
+                      AppTheme.primaryColor.withValues(alpha: 0.15),
                   child: Icon(
                     _selectedFileName!.endsWith('.json')
                         ? Icons.data_object
@@ -227,7 +259,7 @@ class _ImportScreenState extends State<ImportScreen> {
                     : IconButton(
                         icon: const Icon(Icons.close),
                         onPressed: () => setState(() {
-                          _selectedFilePath = null;
+                          _fileContent = null;
                           _selectedFileName = null;
                           _fileSize = null;
                           _result = null;
@@ -279,8 +311,8 @@ class _ImportScreenState extends State<ImportScreen> {
               const SizedBox(height: 4),
               Text(
                 'Do not close this screen',
-                style: TextStyle(
-                    fontSize: 12, color: Colors.grey.shade500),
+                style:
+                    TextStyle(fontSize: 12, color: Colors.grey.shade500),
               ),
             ],
           ),
@@ -326,11 +358,16 @@ class _ImportScreenState extends State<ImportScreen> {
                                 : Colors.orange,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        success ? 'Import Complete' : 'Import Finished with Issues',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                      Expanded(
+                        child: Text(
+                          success
+                              ? 'Import Complete'
+                              : 'Import Finished with Issues',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ],
                   ),
@@ -341,12 +378,15 @@ class _ImportScreenState extends State<ImportScreen> {
                   _summaryRow('Errors', result.errors.length.toString()),
                   _summaryRow(
                     'Duration',
-                    '${result.elapsed.inSeconds > 0 ? "${result.elapsed.inSeconds}s" : "${result.elapsed.inMilliseconds}ms"}',
+                    result.elapsed.inSeconds > 0
+                        ? '${result.elapsed.inSeconds}s'
+                        : '${result.elapsed.inMilliseconds}ms',
                   ),
                   if (result.imported > 0) ...[
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () => Navigator.pushNamed(context, '/data-audit'),
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/data-audit'),
                       icon: const Icon(Icons.health_and_safety, size: 18),
                       label: const Text('Run Data Audit'),
                     ),
@@ -373,7 +413,8 @@ class _ImportScreenState extends State<ImportScreen> {
                       dense: true,
                       leading: CircleAvatar(
                         radius: 14,
-                        backgroundColor: AppTheme.errorColor.withValues(alpha: 0.15),
+                        backgroundColor:
+                            AppTheme.errorColor.withValues(alpha: 0.15),
                         child: Text(
                           '${e.row}',
                           style: TextStyle(
@@ -404,7 +445,7 @@ class _ImportScreenState extends State<ImportScreen> {
             width: double.infinity,
             child: OutlinedButton.icon(
               onPressed: () => setState(() {
-                _selectedFilePath = null;
+                _fileContent = null;
                 _selectedFileName = null;
                 _fileSize = null;
                 _result = null;
@@ -425,7 +466,8 @@ class _ImportScreenState extends State<ImportScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.grey.shade700)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(value,
+              style: const TextStyle(fontWeight: FontWeight.w600)),
         ],
       ),
     );

@@ -1,11 +1,13 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../../models/models.dart';
 import '../../services/animal_provider.dart';
 import '../../services/import_export_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/file_helper.dart' as file_helper;
 
 class ExportScreen extends StatefulWidget {
   const ExportScreen({super.key});
@@ -22,8 +24,9 @@ class _ExportScreenState extends State<ExportScreen> {
   bool _isExporting = false;
   int _written = 0;
   int _total = 0;
-  String? _exportedPath;
+  bool _exportDone = false;
   int? _exportedCount;
+  String? _savedPath; // Only set on native after save
 
   Future<void> _startExport() async {
     final provider = context.read<AnimalProvider>();
@@ -34,19 +37,21 @@ class _ExportScreenState extends State<ExportScreen> {
       _isExporting = true;
       _written = 0;
       _total = 0;
-      _exportedPath = null;
+      _exportDone = false;
+      _savedPath = null;
     });
 
-    String path;
+    // Generate content as a string (platform-agnostic)
+    String content;
     if (_format == 'json') {
-      path = await _exportService.exportJson(
+      content = await _exportService.exportJsonContent(
         animals: animals,
         onProgress: (w, t) {
           if (mounted) setState(() { _written = w; _total = t; });
         },
       );
     } else {
-      path = await _exportService.exportCsv(
+      content = await _exportService.exportCsvContent(
         animals: animals,
         onProgress: (w, t) {
           if (mounted) setState(() { _written = w; _total = t; });
@@ -54,21 +59,26 @@ class _ExportScreenState extends State<ExportScreen> {
       );
     }
 
+    // Save / download the file
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final ext = _format == 'json' ? 'json' : 'csv';
+    final filename = 'animals_export_$timestamp.$ext';
+
+    final path = await file_helper.downloadFile(content, filename);
+
     if (mounted) {
       setState(() {
         _isExporting = false;
-        _exportedPath = path;
+        _exportDone = true;
         _exportedCount = _total;
+        _savedPath = path;
       });
     }
   }
 
   Future<void> _shareFile() async {
-    if (_exportedPath == null) return;
-    await Share.shareXFiles(
-      [XFile(_exportedPath!)],
-      subject: 'Animal Data Export',
-    );
+    if (_savedPath == null) return;
+    await file_helper.shareFile(_savedPath!, subject: 'Animal Data Export');
   }
 
   @override
@@ -82,136 +92,142 @@ class _ExportScreenState extends State<ExportScreen> {
       appBar: AppBar(title: const Text('Export Animals')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Format selection
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Export Format',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    _FormatOption(
-                      icon: Icons.table_chart,
-                      title: 'CSV',
-                      subtitle:
-                          'Comma-separated values. Compatible with Excel, '
-                          'Google Sheets, and most data tools.',
-                      selected: _format == 'csv',
-                      onTap: () => setState(() => _format = 'csv'),
-                    ),
-                    const SizedBox(height: 8),
-                    _FormatOption(
-                      icon: Icons.data_object,
-                      title: 'JSON',
-                      subtitle:
-                          'Structured data format. Best for re-importing '
-                          'or integration with other software.',
-                      selected: _format == 'json',
-                      onTap: () => setState(() => _format = 'json'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Scope selection
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Data Scope',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 12),
-                    RadioListTile<String>(
-                      title: Text('All animals ($allCount)'),
-                      value: 'all',
-                      groupValue: _scope,
-                      onChanged: (v) => setState(() => _scope = v!),
-                      dense: true,
-                      activeColor: AppTheme.primaryColor,
-                    ),
-                    RadioListTile<String>(
-                      title: Text(
-                        'Current filter ($filteredCount)',
-                        style: TextStyle(
-                          color: hasFilters ? null : Colors.grey,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Format selection
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Export Format',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
-                      ),
-                      subtitle: hasFilters
-                          ? const Text('Uses your active search/filter')
-                          : const Text('No filters active — same as all'),
-                      value: 'filtered',
-                      groupValue: _scope,
-                      onChanged: (v) => setState(() => _scope = v!),
-                      dense: true,
-                      activeColor: AppTheme.primaryColor,
+                        const SizedBox(height: 12),
+                        _FormatOption(
+                          icon: Icons.table_chart,
+                          title: 'CSV',
+                          subtitle:
+                              'Comma-separated values. Compatible with Excel, '
+                              'Google Sheets, and most data tools.',
+                          selected: _format == 'csv',
+                          onTap: () => setState(() => _format = 'csv'),
+                        ),
+                        const SizedBox(height: 8),
+                        _FormatOption(
+                          icon: Icons.data_object,
+                          title: 'JSON',
+                          subtitle:
+                              'Structured data format. Best for re-importing '
+                              'or integration with other software.',
+                          selected: _format == 'json',
+                          onTap: () => setState(() => _format = 'json'),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Export button
-            if (!_isExporting && _exportedPath == null)
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: allCount > 0 ? _startExport : null,
-                  icon: const Icon(Icons.download, size: 20),
-                  label: const Text('Export'),
-                ),
-              ),
-
-            // Progress
-            if (_isExporting)
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      LinearProgressIndicator(
-                        value: _total > 0 ? _written / _total : null,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: const AlwaysStoppedAnimation(
-                            AppTheme.primaryColor),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _total > 0
-                            ? 'Writing record $_written of $_total...'
-                            : 'Preparing export...',
-                        style: TextStyle(color: Colors.grey.shade600),
-                      ),
-                    ],
                   ),
                 ),
-              ),
 
-            // Result
-            if (_exportedPath != null) _buildResult(),
-          ],
+                const SizedBox(height: 16),
+
+                // Scope selection
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Data Scope',
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 12),
+                        RadioListTile<String>(
+                          title: Text('All animals ($allCount)'),
+                          value: 'all',
+                          groupValue: _scope,
+                          onChanged: (v) => setState(() => _scope = v!),
+                          dense: true,
+                          activeColor: AppTheme.primaryColor,
+                        ),
+                        RadioListTile<String>(
+                          title: Text(
+                            'Current filter ($filteredCount)',
+                            style: TextStyle(
+                              color: hasFilters ? null : Colors.grey,
+                            ),
+                          ),
+                          subtitle: hasFilters
+                              ? const Text('Uses your active search/filter')
+                              : const Text(
+                                  'No filters active \u2014 same as all'),
+                          value: 'filtered',
+                          groupValue: _scope,
+                          onChanged: (v) => setState(() => _scope = v!),
+                          dense: true,
+                          activeColor: AppTheme.primaryColor,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // Export button
+                if (!_isExporting && !_exportDone)
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton.icon(
+                      onPressed: allCount > 0 ? _startExport : null,
+                      icon: const Icon(Icons.download, size: 20),
+                      label: const Text('Export'),
+                    ),
+                  ),
+
+                // Progress
+                if (_isExporting)
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          LinearProgressIndicator(
+                            value: _total > 0 ? _written / _total : null,
+                            backgroundColor: Colors.grey.shade200,
+                            valueColor: const AlwaysStoppedAnimation(
+                                AppTheme.primaryColor),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _total > 0
+                                ? 'Writing record $_written of $_total...'
+                                : 'Preparing export...',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // Result
+                if (_exportDone) _buildResult(),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -242,26 +258,37 @@ class _ExportScreenState extends State<ExportScreen> {
               '$_exportedCount animals exported to ${_format.toUpperCase()}.',
               style: TextStyle(color: Colors.grey.shade700),
             ),
-            const SizedBox(height: 4),
-            Text(
-              _exportedPath!,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-            ),
+            if (!kIsWeb && _savedPath != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                _savedPath!,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ],
+            if (kIsWeb) ...[
+              const SizedBox(height: 4),
+              Text(
+                'File downloaded to your browser\'s downloads folder.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              ),
+            ],
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _shareFile,
-                    icon: const Icon(Icons.share, size: 18),
-                    label: const Text('Share'),
+                if (!kIsWeb)
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _shareFile,
+                      icon: const Icon(Icons.share, size: 18),
+                      label: const Text('Share'),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
+                if (!kIsWeb) const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => setState(() {
-                      _exportedPath = null;
+                      _exportDone = false;
+                      _savedPath = null;
                       _exportedCount = null;
                     }),
                     icon: const Icon(Icons.refresh, size: 18),
@@ -324,9 +351,7 @@ class _FormatOption extends StatelessWidget {
                     title,
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: selected
-                          ? AppTheme.primaryColor
-                          : null,
+                      color: selected ? AppTheme.primaryColor : null,
                     ),
                   ),
                   Text(

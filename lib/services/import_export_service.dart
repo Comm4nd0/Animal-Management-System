@@ -1,9 +1,7 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:csv/csv.dart';
 import 'package:intl/intl.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../models/models.dart';
 import 'database_service.dart';
@@ -35,11 +33,14 @@ class ImportError {
 
 /// Handles CSV/JSON import and export of animal data.
 ///
+/// Platform-agnostic: works with raw string content, not file paths.
+/// The UI layer is responsible for reading files (via file_picker bytes
+/// on web, or dart:io File on mobile) and for saving/downloading
+/// the exported content.
+///
 /// Designed for datasets of millions of entries:
-/// - Import: streams the file line-by-line, parses in chunks, and uses
-///   batch inserts (500 rows per transaction) to avoid memory bloat.
-/// - Export: writes directly to a file stream, never holding the full
-///   dataset in memory.
+/// - Import: parses in chunks, batch inserts (500 rows per transaction).
+/// - Export: builds content incrementally, reports progress.
 class ImportExportService {
   final DatabaseService _db;
 
@@ -71,22 +72,18 @@ class ImportExportService {
 
   // ─── Import ────────────────────────────────────────────────────
 
-  /// Imports animals from a CSV file at [filePath].
+  /// Imports animals from CSV content string.
   ///
-  /// Streams the file to keep memory bounded regardless of file size.
-  /// Calls [onProgress] with (processed, total) — total may be estimated
-  /// for streamed files but is exact once the file is fully read.
-  Future<ImportResult> importCsv(
-    String filePath, {
+  /// Parses rows and batch-inserts into the database.
+  /// Calls [onProgress] with (processed, total).
+  Future<ImportResult> importCsvFromContent(
+    String contents, {
     void Function(int processed, int total)? onProgress,
-    bool skipDuplicateIds = true,
   }) async {
     final stopwatch = Stopwatch()..start();
     final errors = <ImportError>[];
     final animals = <Animal>[];
 
-    final file = File(filePath);
-    final contents = await file.readAsString();
     final rows = const CsvToListConverter(eol: '\n').convert(contents);
 
     if (rows.isEmpty) {
@@ -100,7 +97,8 @@ class ImportExportService {
     }
 
     // Parse header row — normalise to snake_case for flexible matching
-    final rawHeaders = rows.first.map((h) => _normaliseHeader(h.toString())).toList();
+    final rawHeaders =
+        rows.first.map((h) => _normaliseHeader(h.toString())).toList();
 
     // Map header names to column indices
     final colIndex = <String, int>{};
@@ -116,7 +114,9 @@ class ImportExportService {
           totalRows: rows.length - 1,
           imported: 0,
           skipped: 0,
-          errors: [ImportError(row: 0, message: 'Missing required column: "$col".')],
+          errors: [
+            ImportError(row: 0, message: 'Missing required column: "$col".')
+          ],
           elapsed: stopwatch.elapsed,
         );
       }
@@ -166,19 +166,17 @@ class ImportExportService {
     );
   }
 
-  /// Imports animals from a JSON file at [filePath].
+  /// Imports animals from JSON content string.
   ///
   /// Expects a JSON array of objects at the top level.
-  Future<ImportResult> importJson(
-    String filePath, {
+  Future<ImportResult> importJsonFromContent(
+    String contents, {
     void Function(int processed, int total)? onProgress,
   }) async {
     final stopwatch = Stopwatch()..start();
     final errors = <ImportError>[];
     final animals = <Animal>[];
 
-    final file = File(filePath);
-    final contents = await file.readAsString();
     final List<dynamic> jsonList;
     try {
       jsonList = json.decode(contents) as List<dynamic>;
@@ -234,7 +232,8 @@ class ImportExportService {
     );
   }
 
-  Animal? _parseRow(List<dynamic> row, Map<String, int> colIndex, int rowIdx) {
+  Animal? _parseRow(
+      List<dynamic> row, Map<String, int> colIndex, int rowIdx) {
     String? cell(String name) {
       final idx = colIndex[name];
       if (idx == null || idx >= row.length) return null;
@@ -269,7 +268,8 @@ class ImportExportService {
       dateOfDeath: _parseDate(cell('date_of_death')),
       color: cell('color'),
       markings: cell('markings'),
-      registrationNumber: cell('registration_number') ?? cell('reg_number'),
+      registrationNumber:
+          cell('registration_number') ?? cell('reg_number'),
       microchipNumber: cell('microchip_number') ?? cell('microchip'),
       dnaProfileId: cell('dna_profile_id'),
       sireId: cell('sire_id') ?? cell('sire'),
@@ -298,9 +298,15 @@ class ImportExportService {
     final species = str('species');
     final breed = str('breed');
 
-    if (name == null) throw FormatException('Missing required field "name".');
-    if (species == null) throw FormatException('Missing required field "species".');
-    if (breed == null) throw FormatException('Missing required field "breed".');
+    if (name == null) {
+      throw FormatException('Missing required field "name".');
+    }
+    if (species == null) {
+      throw FormatException('Missing required field "species".');
+    }
+    if (breed == null) {
+      throw FormatException('Missing required field "breed".');
+    }
 
     return Animal(
       id: str('id'),
@@ -313,7 +319,8 @@ class ImportExportService {
       dateOfDeath: _parseDate(str('date_of_death')),
       color: str('color'),
       markings: str('markings'),
-      registrationNumber: str('registration_number') ?? str('reg_number'),
+      registrationNumber:
+          str('registration_number') ?? str('reg_number'),
       microchipNumber: str('microchip_number') ?? str('microchip'),
       dnaProfileId: str('dna_profile_id'),
       sireId: str('sire_id') ?? str('sire'),
@@ -329,22 +336,19 @@ class ImportExportService {
 
   // ─── Export ────────────────────────────────────────────────────
 
-  /// Exports all animals to a CSV file and returns the file path.
+  /// Generates CSV content string for the given animals.
   ///
-  /// Writes in chunks to keep memory usage bounded. If [animals] is
-  /// provided, exports those; otherwise queries all from the database.
-  Future<String> exportCsv({
+  /// If [animals] is null, queries all from the database.
+  /// Returns the CSV string.
+  Future<String> exportCsvContent({
     List<Animal>? animals,
     void Function(int written, int total)? onProgress,
   }) async {
     final data = animals ?? await _db.getAllAnimals();
-    final dir = await getApplicationDocumentsDirectory();
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final file = File('${dir.path}/animals_export_$timestamp.csv');
-    final sink = file.openWrite();
+    final buf = StringBuffer();
 
     // Write header
-    sink.writeln(const ListToCsvConverter().convert([csvHeaders]));
+    buf.writeln(const ListToCsvConverter().convert([csvHeaders]));
 
     final total = data.length;
     for (var i = 0; i < total; i++) {
@@ -369,31 +373,25 @@ class ImportExportService {
         a.height?.toString() ?? '',
         a.notes ?? '',
       ];
-      sink.writeln(const ListToCsvConverter().convert([row]));
+      buf.writeln(const ListToCsvConverter().convert([row]));
 
       if (onProgress != null && (i % 500 == 0 || i == total - 1)) {
         onProgress(i + 1, total);
       }
     }
 
-    await sink.flush();
-    await sink.close();
-
-    return file.path;
+    return buf.toString();
   }
 
-  /// Exports all animals to a JSON file and returns the file path.
-  Future<String> exportJson({
+  /// Generates JSON content string for the given animals.
+  Future<String> exportJsonContent({
     List<Animal>? animals,
     void Function(int written, int total)? onProgress,
   }) async {
     final data = animals ?? await _db.getAllAnimals();
-    final dir = await getApplicationDocumentsDirectory();
-    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-    final file = File('${dir.path}/animals_export_$timestamp.json');
-    final sink = file.openWrite();
+    final buf = StringBuffer();
 
-    sink.write('[\n');
+    buf.write('[\n');
     final total = data.length;
     for (var i = 0; i < total; i++) {
       final a = data[i];
@@ -404,8 +402,10 @@ class ImportExportService {
         'breed': a.breed,
         'sex': a.sex.name,
         'status': a.status.name,
-        'date_of_birth': a.dateOfBirth != null ? _dateFmt.format(a.dateOfBirth!) : null,
-        'date_of_death': a.dateOfDeath != null ? _dateFmt.format(a.dateOfDeath!) : null,
+        'date_of_birth':
+            a.dateOfBirth != null ? _dateFmt.format(a.dateOfBirth!) : null,
+        'date_of_death':
+            a.dateOfDeath != null ? _dateFmt.format(a.dateOfDeath!) : null,
         'color': a.color,
         'markings': a.markings,
         'registration_number': a.registrationNumber,
@@ -416,34 +416,28 @@ class ImportExportService {
         'weight': a.weight,
         'height': a.height,
         'notes': a.notes,
-        'custom_fields': a.customFields.isNotEmpty ? a.customFields : null,
+        'custom_fields':
+            a.customFields.isNotEmpty ? a.customFields : null,
       };
-      // Remove null values for cleaner output
       map.removeWhere((_, v) => v == null);
 
-      sink.write('  ${json.encode(map)}');
-      if (i < total - 1) sink.write(',');
-      sink.write('\n');
+      buf.write('  ${json.encode(map)}');
+      if (i < total - 1) buf.write(',');
+      buf.write('\n');
 
       if (onProgress != null && (i % 500 == 0 || i == total - 1)) {
         onProgress(i + 1, total);
       }
     }
 
-    sink.write(']\n');
-    await sink.flush();
-    await sink.close();
-
-    return file.path;
+    buf.write(']\n');
+    return buf.toString();
   }
 
-  /// Generates a CSV template file with headers only and returns the path.
-  Future<String> generateTemplate() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final file = File('${dir.path}/animal_import_template.csv');
-    final sink = file.openWrite();
-    sink.writeln(const ListToCsvConverter().convert([csvHeaders]));
-    // Write one example row
+  /// Generates a CSV template string with headers and one example row.
+  String generateTemplateContent() {
+    final buf = StringBuffer();
+    buf.writeln(const ListToCsvConverter().convert([csvHeaders]));
     final example = [
       '', // id (auto-generated if blank)
       'Example Name',
@@ -464,21 +458,16 @@ class ImportExportService {
       '58.0',
       'Example notes',
     ];
-    sink.writeln(const ListToCsvConverter().convert([example]));
-    await sink.flush();
-    await sink.close();
-    return file.path;
+    buf.writeln(const ListToCsvConverter().convert([example]));
+    return buf.toString();
   }
 
   // ─── Helpers ───────────────────────────────────────────────────
 
   /// Normalises a header string to snake_case for flexible column matching.
-  /// "Date Of Birth" -> "date_of_birth", "dateOfBirth" -> "date_of_birth"
   static String _normaliseHeader(String h) {
-    // Insert underscore before uppercase letters (camelCase -> snake_case)
     var s = h.replaceAllMapped(
         RegExp(r'([a-z])([A-Z])'), (m) => '${m[1]}_${m[2]}');
-    // Replace spaces, hyphens with underscores
     s = s.replaceAll(RegExp(r'[\s\-]+'), '_');
     return s.toLowerCase().trim();
   }
@@ -525,7 +514,6 @@ class ImportExportService {
     try {
       return DateTime.parse(value);
     } catch (_) {
-      // Try common formats
       for (final fmt in [
         DateFormat('yyyy-MM-dd'),
         DateFormat('dd/MM/yyyy'),
