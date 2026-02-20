@@ -1,42 +1,15 @@
 version: '3.8'
 
 services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${DB_NAME:-pedigree_db}
-      POSTGRES_USER: ${DB_USER:-pedigree_admin}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pedigree_admin}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    # Limit resource usage on small instance
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
   web:
     build:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
     env_file: .env
-    environment:
-      - DB_HOST=db
-      - DB_PORT=5432
-      - DEBUG=False
     volumes:
       - static_files:/app/staticfiles
       - media_files:/app/media
-    depends_on:
-      db:
-        condition: service_healthy
     command: >
       sh -c "python manage.py migrate --noinput &&
              python manage.py collectstatic --noinput &&
@@ -50,7 +23,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 512M
 
   nginx:
     image: nginx:alpine
@@ -68,7 +41,6 @@ services:
       - web
 
 volumes:
-  postgres_data:
   static_files:
   media_files:
   certbot_www:
