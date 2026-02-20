@@ -1,11 +1,48 @@
 import 'package:flutter/material.dart';
+import '../../services/api_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/constants.dart';
 
 /// Public-facing landing page for the web app.
 /// Showcases features, service tiers, and provides login/register CTAs.
-class LandingScreen extends StatelessWidget {
+///
+/// Pricing tiers are fetched from the backend API so that any changes
+/// made via Django Admin are reflected immediately. Falls back to the
+/// hardcoded [serviceTiers] constant if the API is unreachable.
+class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
+
+  @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen> {
+  List<ServiceTierInfo> _tiers = serviceTiers; // fallback to hardcoded
+  bool _tiersLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTiers();
+  }
+
+  Future<void> _fetchTiers() async {
+    try {
+      final api = ApiService();
+      final data = await api.getTiers();
+      if (data.isNotEmpty && mounted) {
+        setState(() {
+          _tiers = data;
+          _tiersLoading = false;
+        });
+      } else if (mounted) {
+        setState(() => _tiersLoading = false);
+      }
+    } catch (_) {
+      // API unavailable – keep hardcoded defaults
+      if (mounted) setState(() => _tiersLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -288,6 +325,7 @@ class LandingScreen extends StatelessWidget {
             'Everything You Need',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade900,
                 ),
           ),
           const SizedBox(height: 8),
@@ -317,6 +355,7 @@ class LandingScreen extends StatelessWidget {
     final isWide = MediaQuery.of(context).size.width > 800;
 
     return Container(
+      color: Colors.white,
       padding: EdgeInsets.symmetric(
         horizontal: isWide ? 80 : 24,
         vertical: 64,
@@ -327,6 +366,7 @@ class LandingScreen extends StatelessWidget {
             'Simple, Transparent Pricing',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade900,
                 ),
           ),
           const SizedBox(height: 8),
@@ -337,17 +377,23 @@ class LandingScreen extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 40),
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            alignment: WrapAlignment.center,
-            children: serviceTiers
-                .map((tier) => SizedBox(
-                      width: isWide ? 260 : double.infinity,
-                      child: _PricingCard(tier: tier),
-                    ))
-                .toList(),
-          ),
+          if (_tiersLoading)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(),
+            )
+          else
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              alignment: WrapAlignment.center,
+              children: _tiers
+                  .map((tier) => SizedBox(
+                        width: isWide ? 260 : double.infinity,
+                        child: _PricingCard(tier: tier),
+                      ))
+                  .toList(),
+            ),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
@@ -401,6 +447,7 @@ class LandingScreen extends StatelessWidget {
             'Built for Farm Animals & Horses',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade900,
                 ),
           ),
           const SizedBox(height: 8),
@@ -544,6 +591,7 @@ class _FeatureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 1,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -559,6 +607,7 @@ class _FeatureCard extends StatelessWidget {
               feature.title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade900,
                   ),
             ),
             const SizedBox(height: 8),
@@ -587,6 +636,7 @@ class _PricingCard extends StatelessWidget {
 
     return Card(
       elevation: isEnterprise ? 4 : 1,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: isEnterprise
@@ -621,6 +671,7 @@ class _PricingCard extends StatelessWidget {
                   tier.label,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade900,
                       ),
                 ),
                 const SizedBox(height: 12),
@@ -633,7 +684,7 @@ class _PricingCard extends StatelessWidget {
                 ),
                 Text(
                   'animals',
-                  style: TextStyle(color: Colors.grey.shade500),
+                  style: TextStyle(color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 20),
                 _pricingFeature(
@@ -692,14 +743,14 @@ class _PricingCard extends StatelessWidget {
           Icon(
             included ? Icons.check_circle : Icons.cancel,
             size: 18,
-            color: included ? AppTheme.primaryColor : Colors.grey.shade300,
+            color: included ? AppTheme.primaryColor : Colors.grey.shade400,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
-                color: included ? Colors.black87 : Colors.grey.shade400,
+                color: included ? Colors.grey.shade800 : Colors.grey.shade500,
                 decoration: included ? null : TextDecoration.lineThrough,
               ),
             ),
@@ -724,6 +775,7 @@ class _SpeciesChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
@@ -736,11 +788,14 @@ class _SpeciesChip extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade900,
+              ),
             ),
             Text(
               detail,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ],
         ),

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import '../models/models.dart';
+import '../utils/constants.dart';
 
 /// REST API client for the Django backend.
 ///
@@ -119,6 +120,26 @@ class ApiService {
   Future<Map<String, dynamic>> getDashboardStats() async {
     final data = await _get('/animals/dashboard-stats/');
     return Map<String, dynamic>.from(data);
+  }
+
+  // ─── Service Tiers ─────────────────────────────────────────
+
+  /// Fetch the list of service tiers from the backend.
+  /// Returns tier info as configured in Django Admin (or hard-coded defaults).
+  Future<List<ServiceTierInfo>> getTiers() async {
+    final data = await _get('/accounts/tiers/');
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) {
+      final tierIndex = m['tier_id'] as int;
+      return ServiceTierInfo(
+        tier: ServiceTier.values[tierIndex],
+        label: m['label'] as String,
+        description: m['description'] as String? ?? '',
+        maxAnimals: m['max_animals'] as int?,
+        allowsMultiBreed: m['allows_multi_breed'] as bool? ?? false,
+        maxUsers: m['max_users'] as int?,
+      );
+    }).toList();
   }
 
   // ─── Authentication ─────────────────────────────────────────
