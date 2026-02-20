@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import '../models/models.dart';
 import 'animal_provider.dart';
 import 'api_service.dart';
@@ -13,8 +13,9 @@ import 'demo_data_generator.dart';
 ///   2. Configure [ApiService] with the token.
 ///   3. Sync demo data from the API into local SQLite.
 ///   4. Set [AnimalProvider.isDemoMode] = true.
-///   5. If the API is unreachable, fall back to [DemoDataGenerator] which
-///      creates ~200 animals directly in SQLite.
+///   5. On mobile only: if the API is unreachable, fall back to
+///      [DemoDataGenerator] which creates ~200 animals directly in SQLite.
+///      (Web builds skip the fallback because sqflite isn't available.)
 ///
 /// **Exit flow**:
 ///   1. Clear local SQLite data.
@@ -50,13 +51,23 @@ class DemoService {
       provider.setDemoMode(true);
       await provider.loadAll();
       return true;
-    } catch (e) {
-      debugPrint('Demo API login failed, using fallback generator: $e');
+    } catch (e, st) {
+      debugPrint('Demo API login failed: $e');
+      debugPrint('$st');
+
+      // On web, sqflite isn't available so the fallback generator won't work.
+      // The web app is served from Django, so the API should always be reachable.
+      if (kIsWeb) {
+        debugPrint('Skipping fallback on web (sqflite not supported)');
+        return false;
+      }
+
       return _enterFallbackDemo(provider);
     }
   }
 
   /// Fallback: generate demo data locally when the API is unreachable.
+  /// Only used on mobile where sqflite is available.
   Future<bool> _enterFallbackDemo(AnimalProvider provider) async {
     try {
       final generator = DemoDataGenerator(db: _db);
@@ -65,8 +76,9 @@ class DemoService {
       provider.setDemoMode(true);
       await provider.loadAll();
       return true;
-    } catch (e) {
+    } catch (e, st) {
       debugPrint('Fallback demo generation failed: $e');
+      debugPrint('$st');
       return false;
     }
   }
@@ -78,9 +90,14 @@ class DemoService {
     provider.setAuthToken(null);
 
     // Clear all local data
-    await _clearLocalData();
+    try {
+      await _clearLocalData();
+    } catch (e) {
+      debugPrint('Clear local data failed (expected on web): $e');
+    }
 
-    // Reset demo flag
+    // Reset demo flag and user profile
+    provider.setUserProfile(null);
     provider.setDemoMode(false);
 
     // Reload (will be empty)

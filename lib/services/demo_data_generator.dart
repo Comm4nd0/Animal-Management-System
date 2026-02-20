@@ -79,20 +79,17 @@ class DemoDataGenerator {
       CustomFieldDefinition(
         name: 'Ear Tag',
         fieldKey: 'ear_tag',
-        fieldType: FieldType.text,
-        appliesTo: 'Cattle',
+        fieldType: CustomFieldType.text,
       ),
       CustomFieldDefinition(
         name: 'Fleece Weight (kg)',
         fieldKey: 'fleece_weight',
-        fieldType: FieldType.number,
-        appliesTo: 'Sheep',
+        fieldType: CustomFieldType.number,
       ),
       CustomFieldDefinition(
         name: 'Racing Class',
         fieldKey: 'racing_class',
-        fieldType: FieldType.dropdown,
-        appliesTo: 'Horse',
+        fieldType: CustomFieldType.dropdown,
         options: ['Maiden', 'Class 1', 'Class 2', 'Open'],
       ),
     ];
@@ -232,7 +229,7 @@ class DemoDataGenerator {
     final titles = {
       HealthRecordType.vaccination: ['Annual Vaccination', '5-in-1 Vaccine', 'Tetanus Booster', 'Rabies Vaccine'],
       HealthRecordType.examination: ['Annual Exam', 'Pre-breeding Check', 'Lameness Exam', 'Dental Check'],
-      HealthRecordType.treatment: ['Deworming', 'Wound Treatment', 'Antibiotic Course', 'Hoof Trim'],
+      HealthRecordType.other: ['Deworming', 'Wound Treatment', 'Antibiotic Course', 'Hoof Trim'],
       HealthRecordType.surgery: ['Castration', 'Caesarean', 'Abscess Drainage'],
       HealthRecordType.medication: ['Ivermectin', 'Penicillin', 'Flunixin', 'Dexamethasone'],
     };
@@ -270,7 +267,6 @@ class DemoDataGenerator {
       animalId: animal.id,
       weight: weight,
       date: date,
-      unit: 'kg',
     );
   }
 
@@ -292,7 +288,7 @@ class DemoDataGenerator {
     final entry = names[index % names.length];
     return Contact(
       name: entry.$1,
-      role: entry.$2,
+      notes: 'Role: ${entry.$2}',
       phone: '+1 555 ${100 + _rng.nextInt(900)} ${1000 + _rng.nextInt(9000)}',
       email: entry.$1.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '') + '@example.com',
     );

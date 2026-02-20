@@ -112,7 +112,7 @@ class AnimalProvider extends ChangeNotifier {
     return _userProfile!.validateAnimalAddition(species, breed);
   }
 
-  void setUserProfile(UserProfile profile) {
+  void setUserProfile(UserProfile? profile) {
     _userProfile = profile;
     notifyListeners();
   }
