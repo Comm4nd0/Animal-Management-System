@@ -1,6 +1,42 @@
-from rest_framework import serializers
+import re
+
+from django.contrib.auth import password_validation
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework import serializers
+
 from .models import UserProfile, ServiceTier, UserRole
+
+
+def validate_password_complexity(password):
+    """
+    Validate password meets complexity requirements:
+    - At least 8 characters (enforced by field min_length)
+    - At least one uppercase letter
+    - At least one lowercase letter
+    - At least one digit
+    - At least one special character
+    - Passes Django's built-in validators (common passwords, similarity, etc.)
+    """
+    errors = []
+
+    if not re.search(r'[A-Z]', password):
+        errors.append('Password must contain at least one uppercase letter.')
+    if not re.search(r'[a-z]', password):
+        errors.append('Password must contain at least one lowercase letter.')
+    if not re.search(r'\d', password):
+        errors.append('Password must contain at least one digit.')
+    if not re.search(r'[^A-Za-z0-9]', password):
+        errors.append('Password must contain at least one special character.')
+
+    # Run Django's built-in validators
+    try:
+        password_validation.validate_password(password)
+    except DjangoValidationError as e:
+        errors.extend(e.messages)
+
+    if errors:
+        raise serializers.ValidationError(errors)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -79,6 +115,10 @@ class InviteUserSerializer(serializers.Serializer):
                  (UserRole.ADMIN, 'Admin')],
     )
 
+    def validate_password(self, value):
+        validate_password_complexity(value)
+        return value
+
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError('Username already taken.')
@@ -144,6 +184,10 @@ class UserRegistrationSerializer(serializers.Serializer):
     service_tier = serializers.ChoiceField(choices=ServiceTier.choices)
     farm_name = serializers.CharField(max_length=300, required=False, default='')
 
+    def validate_password(self, value):
+        validate_password_complexity(value)
+        return value
+
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError('Username already taken.')
@@ -196,8 +240,16 @@ class ConfirmPasswordResetSerializer(serializers.Serializer):
     code = serializers.CharField(max_length=6, min_length=6)
     new_password = serializers.CharField(write_only=True, min_length=8)
 
+    def validate_new_password(self, value):
+        validate_password_complexity(value)
+        return value
+
 
 class ChangePasswordSerializer(serializers.Serializer):
     """For logged-in users changing their own password."""
     current_password = serializers.CharField(write_only=True)
     new_password = serializers.CharField(write_only=True, min_length=8)
+
+    def validate_new_password(self, value):
+        validate_password_complexity(value)
+        return value

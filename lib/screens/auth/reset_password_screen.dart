@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../services/api_service.dart';
 import '../../utils/app_theme.dart';
+import '../../utils/password_validator.dart';
 
 /// Screen where users enter the 6-digit reset code and set a new password.
 ///
@@ -138,11 +139,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             ),
             obscureText: _obscurePassword,
             textInputAction: TextInputAction.next,
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Password is required';
-              if (v.length < 8) return 'Password must be at least 8 characters';
-              return null;
-            },
+            validator: validatePasswordComplexity,
           ),
           const SizedBox(height: 16),
 
