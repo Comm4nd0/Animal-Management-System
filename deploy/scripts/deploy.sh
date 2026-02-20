@@ -113,7 +113,7 @@ get_outputs() {
     S3_BUCKET=$(grep 's3_media_bucket' "$TERRAFORM_DIR/terraform.tfvars" | grep -v '#' | sed 's/.*=\s*"\(.*\)"/\1/' || echo "")
 
     SSH_KEY="$HOME/.ssh/p4td-key.pem"
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i $SSH_KEY"
+    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i $SSH_KEY -o ControlMaster=auto -o ControlPath=/tmp/ssh_mux_%h_%p_%r -o ControlPersist=10m"
 }
 
 # ─── Deploy Application ──────────────────────────────────────
@@ -123,10 +123,7 @@ deploy_app() {
 
     # Step 1: Create database on RDS if it doesn't exist
     log "Ensuring database '$RDS_DB_NAME' exists on RDS..."
-    PGPASSWORD="$RDS_PASSWORD" psql -h "$RDS_ENDPOINT" -U "$RDS_USERNAME" -d postgres -tc \
-        "SELECT 1 FROM pg_database WHERE datname = '$RDS_DB_NAME'" | grep -q 1 || \
-    PGPASSWORD="$RDS_PASSWORD" psql -h "$RDS_ENDPOINT" -U "$RDS_USERNAME" -d postgres -c \
-        "CREATE DATABASE $RDS_DB_NAME OWNER $RDS_USERNAME;" && \
+    ssh $SSH_OPTS "ec2-user@$EC2_IP" "PGPASSWORD=\"$RDS_PASSWORD\" psql -h \"$RDS_ENDPOINT\" -U \"$RDS_USERNAME\" -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = '$RDS_DB_NAME'\" | grep -q 1 || PGPASSWORD=\"$RDS_PASSWORD\" psql -h \"$RDS_ENDPOINT\" -U \"$RDS_USERNAME\" -d postgres -c \"CREATE DATABASE $RDS_DB_NAME OWNER $RDS_USERNAME;\"" && \
     log "Database '$RDS_DB_NAME' ready."
 
     # Step 2: Create .env file on EC2
