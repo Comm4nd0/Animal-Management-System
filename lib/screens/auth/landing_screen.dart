@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../services/animal_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/demo_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/constants.dart';
 
@@ -19,6 +22,7 @@ class LandingScreen extends StatefulWidget {
 class _LandingScreenState extends State<LandingScreen> {
   List<ServiceTierInfo> _tiers = serviceTiers; // fallback to hardcoded
   bool _tiersLoading = true;
+  bool _isDemoLoading = false;
 
   @override
   void initState() {
@@ -41,6 +45,26 @@ class _LandingScreenState extends State<LandingScreen> {
     } catch (_) {
       // API unavailable – keep hardcoded defaults
       if (mounted) setState(() => _tiersLoading = false);
+    }
+  }
+
+  Future<void> _enterDemo() async {
+    if (_isDemoLoading) return;
+    setState(() => _isDemoLoading = true);
+
+    final provider = context.read<AnimalProvider>();
+    final demoService = DemoService();
+    final success = await demoService.enterDemoMode(provider);
+
+    if (!mounted) return;
+    setState(() => _isDemoLoading = false);
+
+    if (success) {
+      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load demo. Please try again.')),
+      );
     }
   }
 
@@ -87,6 +111,22 @@ class _LandingScreenState extends State<LandingScreen> {
         TextButton(
           onPressed: () => _scrollToSection(context, 'pricing'),
           child: const Text('Pricing', style: TextStyle(color: Colors.white70)),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: _isDemoLoading ? null : _enterDemo,
+          icon: _isDemoLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.play_circle_outline, size: 18),
+          label: const Text('Try Demo'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
         ),
         const SizedBox(width: 8),
         TextButton(
@@ -171,7 +211,9 @@ class _LandingScreenState extends State<LandingScreen> {
               ),
         ),
         const SizedBox(height: 32),
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
           children: [
             ElevatedButton.icon(
               onPressed: () => Navigator.pushNamed(context, '/register'),
@@ -185,9 +227,8 @@ class _LandingScreenState extends State<LandingScreen> {
               icon: const Icon(Icons.arrow_forward),
               label: const Text('Start Free Trial'),
             ),
-            const SizedBox(width: 16),
-            OutlinedButton(
-              onPressed: () => Navigator.pushNamed(context, '/login'),
+            OutlinedButton.icon(
+              onPressed: _isDemoLoading ? null : _enterDemo,
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white54),
@@ -195,7 +236,17 @@ class _LandingScreenState extends State<LandingScreen> {
                     const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
                 textStyle: const TextStyle(fontSize: 16),
               ),
-              child: const Text('Log In'),
+              icon: _isDemoLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.play_circle_outline),
+              label: const Text('Try Demo'),
             ),
           ],
         ),

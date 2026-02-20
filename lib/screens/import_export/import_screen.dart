@@ -9,6 +9,7 @@ import '../../services/animal_provider.dart';
 import '../../services/import_export_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/file_helper.dart' as file_helper;
+import '../../widgets/demo_write_guard.dart';
 
 class ImportScreen extends StatefulWidget {
   const ImportScreen({super.key});
@@ -578,7 +579,10 @@ class _ImportScreenState extends State<ImportScreen> {
         width: double.infinity,
         height: 48,
         child: ElevatedButton.icon(
-          onPressed: _startImport,
+          onPressed: () async {
+            if (!await guardWriteAction(context)) return;
+            _startImport();
+          },
           icon: const Icon(Icons.upload, size: 20),
           label: const Text('Start Import'),
         ),

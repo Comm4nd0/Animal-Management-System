@@ -152,6 +152,13 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
+  /// Log in as the demo user (read-only, no credentials needed).
+  /// Returns {token, user, is_demo: true} or throws.
+  Future<Map<String, dynamic>> demoLogin() async {
+    final data = await _post('/accounts/demo-login/', {});
+    return Map<String, dynamic>.from(data);
+  }
+
   // ─── Health Records ───────────────────────────────────────────
 
   Future<List<HealthRecord>> getHealthRecords(String animalId) async {

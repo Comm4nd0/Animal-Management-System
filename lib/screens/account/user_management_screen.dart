@@ -4,6 +4,7 @@ import '../../models/models.dart';
 import '../../services/animal_provider.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/constants.dart';
+import '../../widgets/demo_write_guard.dart';
 
 /// Screen for managing team members within an organization.
 /// Accessible to account owners and admins.
@@ -36,7 +37,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       ),
       floatingActionButton: (profile?.canManageUsers ?? false)
           ? FloatingActionButton.extended(
-              onPressed: () => _showInviteDialog(context),
+              onPressed: () async {
+                if (!await guardWriteAction(context)) return;
+                _showInviteDialog(context);
+              },
               icon: const Icon(Icons.person_add),
               label: const Text('Add User'),
             )
@@ -323,7 +327,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     }
   }
 
-  void _handleMemberAction(String action, TeamMember member) {
+  Future<void> _handleMemberAction(String action, TeamMember member) async {
+    if (!await guardWriteAction(context)) return;
     switch (action) {
       case 'change_role':
         _showChangeRoleDialog(member);

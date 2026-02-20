@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class AnimalListScreen extends StatefulWidget {
   const AnimalListScreen({super.key});
@@ -50,7 +51,10 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.pushNamed(context, '/animal/add'),
+        onPressed: () async {
+          if (!await guardWriteAction(context)) return;
+          Navigator.pushNamed(context, '/animal/add');
+        },
         child: const Icon(Icons.add),
       ),
     );

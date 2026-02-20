@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class LitterListScreen extends StatelessWidget {
   const LitterListScreen({super.key});
@@ -124,7 +125,10 @@ class LitterListScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showAddLitterDialog(context),
+        onPressed: () async {
+          if (!await guardWriteAction(context)) return;
+          _showAddLitterDialog(context);
+        },
         child: const Icon(Icons.add),
       ),
     );

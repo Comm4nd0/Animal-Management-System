@@ -7,6 +7,7 @@ import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/constants.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class AnimalFormScreen extends StatefulWidget {
   final String? animalId;
@@ -411,7 +412,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                 SizedBox(
                   height: 48,
                   child: ElevatedButton(
-                    onPressed: _saveAnimal,
+                    onPressed: () async {
+                      if (!await guardWriteAction(context)) return;
+                      _saveAnimal();
+                    },
                     child: Text(_isEditing ? 'Update Animal' : 'Add Animal'),
                   ),
                 ),

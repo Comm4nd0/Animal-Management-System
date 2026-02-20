@@ -51,6 +51,19 @@ class AnimalProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ─── Demo Mode ────────────────────────────────────────────
+  bool _isDemoMode = false;
+  bool get isDemoMode => _isDemoMode;
+
+  /// Whether the current session can create/edit/delete data.
+  /// Returns false in demo mode OR for read-only users.
+  bool get canWrite => !_isDemoMode && canWriteData;
+
+  void setDemoMode(bool value) {
+    _isDemoMode = value;
+    notifyListeners();
+  }
+
   // ─── Account / Tier / Roles ──────────────────────────────────
   UserProfile? _userProfile;
   List<TeamMember> _teamMembers = [];
@@ -126,24 +139,28 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addTeamMember(TeamMember member) async {
+    if (!canWrite) return;
     await _db.insertTeamMember(member);
     _teamMembers = await _db.getAllTeamMembers();
     notifyListeners();
   }
 
   Future<void> updateTeamMemberRole(String memberId, int role) async {
+    if (!canWrite) return;
     await _db.updateTeamMemberRole(memberId, role);
     _teamMembers = await _db.getAllTeamMembers();
     notifyListeners();
   }
 
   Future<void> removeTeamMember(String memberId) async {
+    if (!canWrite) return;
     await _db.deleteTeamMember(memberId);
     _teamMembers = await _db.getAllTeamMembers();
     notifyListeners();
   }
 
   Future<void> replaceAllTeamMembers(List<TeamMember> members) async {
+    if (!canWrite) return;
     await _db.replaceAllTeamMembers(members);
     _teamMembers = members;
     notifyListeners();
@@ -276,6 +293,7 @@ class AnimalProvider extends ChangeNotifier {
   /// Adds an animal after validating pedigree integrity.
   /// Returns null on success, or an error message string.
   Future<String?> addAnimal(Animal animal) async {
+    if (!canWrite) return 'Demo mode: write operations are disabled.';
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
@@ -289,6 +307,7 @@ class AnimalProvider extends ChangeNotifier {
   /// Updates an animal after validating pedigree integrity.
   /// Returns null on success, or an error message string.
   Future<String?> updateAnimal(Animal animal) async {
+    if (!canWrite) return 'Demo mode: write operations are disabled.';
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
@@ -299,6 +318,7 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> deleteAnimal(String id) async {
+    if (!canWrite) return;
     await _db.deleteAnimal(id);
     _animals = await _db.getAllAnimals();
     _stats = await _db.getAnimalStats();
@@ -325,18 +345,21 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addContact(Contact contact) async {
+    if (!canWrite) return;
     await _db.insertContact(contact);
     _contacts = await _db.getAllContacts();
     notifyListeners();
   }
 
   Future<void> updateContact(Contact contact) async {
+    if (!canWrite) return;
     await _db.updateContact(contact);
     _contacts = await _db.getAllContacts();
     notifyListeners();
   }
 
   Future<void> deleteContact(String id) async {
+    if (!canWrite) return;
     await _db.deleteContact(id);
     _contacts = await _db.getAllContacts();
     notifyListeners();
@@ -345,12 +368,14 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Health Records ───────────────────────────────────────────
 
   Future<void> addHealthRecord(HealthRecord record) async {
+    if (!canWrite) return;
     await _db.insertHealthRecord(record);
     _healthRecords = await _db.getHealthRecords(record.animalId);
     notifyListeners();
   }
 
   Future<void> deleteHealthRecord(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteHealthRecord(id);
     _healthRecords = await _db.getHealthRecords(animalId);
     notifyListeners();
@@ -460,12 +485,14 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Breeding Records ────────────────────────────────────────
 
   Future<void> addBreedingRecord(BreedingRecord record) async {
+    if (!canWrite) return;
     await _db.insertBreedingRecord(record);
     _breedingRecords = await _db.getActiveBreedings();
     notifyListeners();
   }
 
   Future<void> updateBreedingRecord(BreedingRecord record) async {
+    if (!canWrite) return;
     await _db.updateBreedingRecord(record);
     _breedingRecords = await _db.getActiveBreedings();
     notifyListeners();
@@ -474,6 +501,7 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Litters ──────────────────────────────────────────────────
 
   Future<void> addLitter(Litter litter) async {
+    if (!canWrite) return;
     await _db.insertLitter(litter);
     _litters = await _db.getAllLitters();
     notifyListeners();
@@ -503,18 +531,21 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addCustomFieldDefinition(CustomFieldDefinition field) async {
+    if (!canWrite) return;
     await _db.insertCustomFieldDefinition(field);
     _customFieldDefinitions = await _db.getCustomFieldDefinitions();
     notifyListeners();
   }
 
   Future<void> updateCustomFieldDefinition(CustomFieldDefinition field) async {
+    if (!canWrite) return;
     await _db.updateCustomFieldDefinition(field);
     _customFieldDefinitions = await _db.getCustomFieldDefinitions();
     notifyListeners();
   }
 
   Future<void> deleteCustomFieldDefinition(String id) async {
+    if (!canWrite) return;
     // Find the field key to remove values from all animals
     final field = _customFieldDefinitions.firstWhere(
       (f) => f.id == id,
@@ -551,12 +582,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addWeightRecord(WeightRecord record) async {
+    if (!canWrite) return;
     await _db.insertWeightRecord(record);
     _weightRecords = await _db.getWeightRecords(record.animalId);
     notifyListeners();
   }
 
   Future<void> deleteWeightRecord(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteWeightRecord(id);
     _weightRecords = await _db.getWeightRecords(animalId);
     notifyListeners();
@@ -573,12 +606,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addShowResult(ShowResult result) async {
+    if (!canWrite) return;
     await _db.insertShowResult(result);
     _showResults = await _db.getShowResults(result.animalId);
     notifyListeners();
   }
 
   Future<void> deleteShowResult(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteShowResult(id);
     _showResults = await _db.getShowResults(animalId);
     notifyListeners();
@@ -595,12 +630,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addFinancialRecord(FinancialRecord record) async {
+    if (!canWrite) return;
     await _db.insertFinancialRecord(record);
     _financialRecords = await _db.getFinancialRecords(record.animalId);
     notifyListeners();
   }
 
   Future<void> deleteFinancialRecord(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteFinancialRecord(id);
     _financialRecords = await _db.getFinancialRecords(animalId);
     notifyListeners();
@@ -617,12 +654,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addDocumentAttachment(DocumentAttachment doc) async {
+    if (!canWrite) return;
     await _db.insertDocumentAttachment(doc);
     _documentAttachments = await _db.getDocumentAttachments(doc.animalId);
     notifyListeners();
   }
 
   Future<void> deleteDocumentAttachment(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteDocumentAttachment(id);
     _documentAttachments = await _db.getDocumentAttachments(animalId);
     notifyListeners();

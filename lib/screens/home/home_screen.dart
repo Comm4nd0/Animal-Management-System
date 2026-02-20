@@ -2,54 +2,93 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
+import '../../services/demo_service.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 import 'dashboard_charts.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _isExitingDemo = false;
+
+  Future<void> _exitDemo() async {
+    setState(() => _isExitingDemo = true);
+    final provider = context.read<AnimalProvider>();
+    final demoService = DemoService();
+    await demoService.exitDemoMode(provider);
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      kIsWeb ? '/' : '/login',
+      (route) => false,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AnimalProvider>();
+    final isDemo = provider.isDemoMode;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pedigree Manager'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.person),
-            tooltip: 'Account',
-            onPressed: () {
-              final profile =
-                  context.read<AnimalProvider>().userProfile;
-              if (profile != null) {
-                Navigator.pushNamed(context, '/account',
-                    arguments: profile);
-              } else {
-                Navigator.pushNamed(context, '/register');
-              }
-            },
-          ),
+          if (!isDemo)
+            IconButton(
+              icon: const Icon(Icons.person),
+              tooltip: 'Account',
+              onPressed: () {
+                final profile =
+                    context.read<AnimalProvider>().userProfile;
+                if (profile != null) {
+                  Navigator.pushNamed(context, '/account',
+                      arguments: profile);
+                } else {
+                  Navigator.pushNamed(context, '/register');
+                }
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.pushNamed(context, '/animals'),
           ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
-            onPressed: () => Navigator.pushNamed(context, '/settings'),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Log Out',
-            onPressed: () {
-              // In production, clear auth tokens here
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                kIsWeb ? '/' : '/login',
-                (route) => false,
-              );
-            },
-          ),
+          if (!isDemo)
+            IconButton(
+              icon: const Icon(Icons.settings),
+              tooltip: 'Settings',
+              onPressed: () => Navigator.pushNamed(context, '/settings'),
+            ),
+          if (isDemo)
+            TextButton.icon(
+              onPressed: _isExitingDemo ? null : _exitDemo,
+              icon: _isExitingDemo
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.exit_to_app, color: Colors.white),
+              label: const Text('Exit Demo', style: TextStyle(color: Colors.white)),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Log Out',
+              onPressed: () {
+                Navigator.pushNamedAndRemoveUntil(
+                  context,
+                  kIsWeb ? '/' : '/login',
+                  (route) => false,
+                );
+              },
+            ),
         ],
       ),
       body: Consumer<AnimalProvider>(
@@ -62,6 +101,10 @@ class HomeScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (isDemo) ...[
+                  _buildDemoBanner(context),
+                  const SizedBox(height: 12),
+                ],
                 _buildWelcomeCard(context),
                 const SizedBox(height: 16),
                 _buildStatsRow(context, provider.stats),
@@ -81,9 +124,62 @@ class HomeScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(context, '/animal/add'),
+        onPressed: () async {
+          if (!await guardWriteAction(context)) return;
+          if (!context.mounted) return;
+          Navigator.pushNamed(context, '/animal/add');
+        },
         icon: const Icon(Icons.add),
         label: const Text('Add Animal'),
+      ),
+    );
+  }
+
+  Widget _buildDemoBanner(BuildContext context) {
+    return Card(
+      color: Colors.amber.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.amber.shade300),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Icon(Icons.explore, color: Colors.amber.shade800),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Exploring Demo',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.amber.shade900,
+                    ),
+                  ),
+                  Text(
+                    'Browse freely — create an account to add your own animals.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.amber.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: () => Navigator.pushNamed(context, '/register'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppTheme.accentColor,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+              ),
+              child: const Text('Create Account'),
+            ),
+          ],
+        ),
       ),
     );
   }

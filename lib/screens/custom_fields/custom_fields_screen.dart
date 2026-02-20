@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/animal_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 /// Screen for managing custom field definitions.
 /// Users can create, edit, reorder, and delete custom fields
@@ -34,18 +35,27 @@ class CustomFieldsScreen extends StatelessWidget {
               return _CustomFieldCard(
                 key: ValueKey(field.id),
                 field: field,
-                onEdit: () => _showFieldDialog(context, provider, field: field),
-                onDelete: () => _confirmDelete(context, provider, field),
+                onEdit: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _showFieldDialog(context, provider, field: field);
+                },
+                onDelete: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _confirmDelete(context, provider, field);
+                },
               );
             },
           );
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showFieldDialog(
-          context,
-          context.read<AnimalProvider>(),
-        ),
+        onPressed: () async {
+          if (!await guardWriteAction(context)) return;
+          _showFieldDialog(
+            context,
+            context.read<AnimalProvider>(),
+          );
+        },
         child: const Icon(Icons.add),
       ),
     );
@@ -78,10 +88,13 @@ class CustomFieldsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: () => _showFieldDialog(
-                context,
-                context.read<AnimalProvider>(),
-              ),
+              onPressed: () async {
+                if (!await guardWriteAction(context)) return;
+                _showFieldDialog(
+                  context,
+                  context.read<AnimalProvider>(),
+                );
+              },
               icon: const Icon(Icons.add),
               label: const Text('Add Custom Field'),
             ),

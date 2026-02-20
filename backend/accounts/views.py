@@ -31,6 +31,41 @@ class AccountViewSet(viewsets.ViewSet):
     remove_user:    POST /api/v1/accounts/remove-user/
     """
 
+    @action(detail=False, methods=['post'], url_path='demo-login')
+    def demo_login(self, request):
+        """
+        Log in as the demo user (read-only, no password required).
+
+        Returns a token and profile with is_demo: true.
+        The demo user must be created first by running:
+            python manage.py seed_demo
+        """
+        from django.contrib.auth.models import User
+
+        try:
+            user = User.objects.get(username='demo_user')
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Demo environment is not configured. Run seed_demo first.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(
+                user=user,
+                service_tier=ServiceTier.ENTERPRISE,
+                role=UserRole.READ_ONLY,
+            )
+
+        return Response({
+            'token': token.key,
+            'user': UserProfileSerializer(profile).data,
+            'is_demo': True,
+        })
+
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request):
         """Authenticate and return an auth token."""
