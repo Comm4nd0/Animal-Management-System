@@ -307,7 +307,7 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
       case HealthRecordType.vaccination:
         return Icons.vaccines;
       case HealthRecordType.examination:
-        return Icons.stethoscope;
+        return Icons.medical_services;
       case HealthRecordType.surgery:
         return Icons.local_hospital;
       case HealthRecordType.medication:

@@ -230,7 +230,7 @@ class _WeightChart extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 return SideTitleWidget(
-                  meta: meta,
+                  axisSide: meta.axisSide,
                   child: Text(
                     DateFormat.MMMd().format(sorted[idx].date),
                     style: const TextStyle(fontSize: 9),
@@ -244,7 +244,7 @@ class _WeightChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 40,
               getTitlesWidget: (value, meta) => SideTitleWidget(
-                meta: meta,
+                axisSide: meta.axisSide,
                 child: Text('${value.toStringAsFixed(0)}',
                     style: const TextStyle(fontSize: 10)),
               ),
