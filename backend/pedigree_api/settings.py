@@ -115,6 +115,13 @@ STORAGES = {
     },
 }
 
+# Flutter web frontend build output
+# WHITENOISE_ROOT serves frontend assets (JS, CSS, icons) at the site root (/)
+# so Flutter's index.html can reference them without a /static/ prefix.
+FRONTEND_DIR = BASE_DIR / 'frontend'
+if FRONTEND_DIR.is_dir():
+    WHITENOISE_ROOT = str(FRONTEND_DIR)
+
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'

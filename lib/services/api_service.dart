@@ -1,84 +1,73 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import '../models/models.dart';
 
 /// REST API client for the Django backend.
 ///
-/// Configure [baseUrl] to point to your deployed Django server.
-/// Defaults to localhost for development.
+/// When running on the web and served by Django, auto-detects the API URL
+/// from the browser origin. For mobile or when API_BASE_URL is set explicitly,
+/// uses the provided value.
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
   /// Base URL for the Django REST API.
-  /// Change this to your production URL when deploying.
-  String baseUrl = const String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000/api/v1',
-  );
+  /// On web builds served by Django, defaults to same-origin /api/v1.
+  /// On mobile, defaults to the Android emulator loopback.
+  static String _defaultBaseUrl() {
+    const env = String.fromEnvironment('API_BASE_URL');
+    if (env.isNotEmpty) return env;
+    return kIsWeb ? '/api/v1' : 'http://10.0.2.2:8000/api/v1';
+  }
 
-  final HttpClient _client = HttpClient();
+  String baseUrl = _defaultBaseUrl();
+
   String? authToken;
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (authToken != null) 'Authorization': 'Token $authToken',
+      };
 
   // ─── HTTP Helpers ─────────────────────────────────────────────
 
   Future<dynamic> _get(String path, {Map<String, String>? queryParams}) async {
-    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
-    final request = await _client.getUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
+    var uri = Uri.parse('$baseUrl$path');
+    if (queryParams != null && queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
     }
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response = await http.get(uri, headers: _headers);
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(body);
+      return jsonDecode(response.body);
     }
-    throw ApiException(response.statusCode, body);
+    throw ApiException(response.statusCode, response.body);
   }
 
   Future<dynamic> _post(String path, Map<String, dynamic> data) async {
     final uri = Uri.parse('$baseUrl$path');
-    final request = await _client.postUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
-    }
-    request.write(jsonEncode(data));
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response =
+        await http.post(uri, headers: _headers, body: jsonEncode(data));
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(body);
+      return jsonDecode(response.body);
     }
-    throw ApiException(response.statusCode, body);
+    throw ApiException(response.statusCode, response.body);
   }
 
   Future<dynamic> _put(String path, Map<String, dynamic> data) async {
     final uri = Uri.parse('$baseUrl$path');
-    final request = await _client.putUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
-    }
-    request.write(jsonEncode(data));
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response =
+        await http.put(uri, headers: _headers, body: jsonEncode(data));
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(body);
+      return jsonDecode(response.body);
     }
-    throw ApiException(response.statusCode, body);
+    throw ApiException(response.statusCode, response.body);
   }
 
   Future<void> _delete(String path) async {
     final uri = Uri.parse('$baseUrl$path');
-    final request = await _client.deleteUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
-    }
-    final response = await request.close();
-    await response.drain();
+    final response = await http.delete(uri, headers: _headers);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(response.statusCode, 'Delete failed');
     }

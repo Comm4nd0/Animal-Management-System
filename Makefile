@@ -1,7 +1,7 @@
 # ─── Pedigree Animal Management System ─────────────────────
 # Run `make help` to see all available commands
 
-.PHONY: help dev down logs test test-backend test-frontend lint migrate shell seed deploy deploy-app setup clean
+.PHONY: help dev down logs test test-backend test-frontend lint migrate shell seed deploy deploy-app setup clean build-web
 
 # ─── Configuration ─────────────────────────────────────────
 DEV_COMPOSE  = docker compose -f docker-compose.dev.yml
@@ -82,6 +82,19 @@ shell: ## Open Django shell in running container
 
 dbshell: ## Open PostgreSQL shell
 	$(DEV_COMPOSE) exec db psql -U pedigree_admin -d pedigree_db
+
+# ─── Flutter Web Build ────────────────────────────────────
+build-web: ## Build Flutter web app and copy to backend for Django to serve
+	@echo "── Building Flutter web app..."
+	cd "$(CURDIR)" && flutter pub get
+	cd "$(CURDIR)" && flutter build web --release
+	@echo "── Copying build to backend/frontend/..."
+	rm -rf "$(CURDIR)/backend/frontend"
+	cp -r "$(CURDIR)/build/web" "$(CURDIR)/backend/frontend"
+	@echo ""
+	@echo "  ✓ Frontend built and copied to backend/frontend/"
+	@echo "  Run 'make dev' or redeploy to serve it via Django."
+	@echo ""
 
 # ─── Production ────────────────────────────────────────────
 deploy: ## Full deploy: infrastructure + application

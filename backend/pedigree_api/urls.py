@@ -1,7 +1,7 @@
 """URL configuration for pedigree_api project."""
 
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework.routers import DefaultRouter
 from accounts.views import AccountViewSet
 from animals.views import (
@@ -17,6 +17,7 @@ from animals.views import (
     DocumentAttachmentViewSet,
 )
 from genetics.views import GeneticsViewSet
+from .views import frontend
 
 router = DefaultRouter()
 router.register(r'accounts', AccountViewSet, basename='account')
@@ -36,4 +37,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/', include(router.urls)),
     path('api/auth/', include('rest_framework.urls')),
+    # Flutter web frontend catch-all (must be last)
+    re_path(r'^(?!admin/|api/|static/).*$', frontend, name='frontend'),
 ]
