@@ -36,6 +36,8 @@ Thumbs.db
 # Environment / Secrets
 .env
 *.env
+!.env.dev
+!backend/.env.example
 backend/.env
 
 # Terraform

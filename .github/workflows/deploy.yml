@@ -1,0 +1,148 @@
+# ─── Continuous Deployment ─────────────────────────────────
+# Deploys to production when code is merged to main/master.
+# Requires CI to pass first. Requires AWS secrets configured.
+#
+# To set up, add these secrets in GitHub → Settings → Secrets:
+#   AWS_ACCESS_KEY_ID
+#   AWS_SECRET_ACCESS_KEY
+#   EC2_SSH_PRIVATE_KEY
+#   EC2_HOST               (your EC2 public IP or domain)
+#   DJANGO_SECRET_KEY
+#   DB_PASSWORD
+#   CLOUDFRONT_DISTRIBUTION_ID
+#   S3_FRONTEND_BUCKET
+
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main, master]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # ─── Gate: CI must pass ─────────────────────────────────
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  # ─── Deploy Backend ─────────────────────────────────────
+  deploy-backend:
+    name: Deploy Backend to EC2
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Create production .env on server
+        run: |
+          ssh -i ~/.ssh/deploy_key ec2-user@${{ secrets.EC2_HOST }} bash -s << 'EOF'
+          cat > /opt/app/.env << DOTENV
+          DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+          DB_NAME=pedigree_db
+          DB_USER=pedigree_admin
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_HOST=db
+          DB_PORT=5432
+          DEBUG=False
+          ALLOWED_HOSTS=${{ secrets.EC2_HOST }},localhost
+          CORS_ALLOW_ALL=False
+          CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
+          DOTENV
+          EOF
+
+      - name: Sync backend code
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude='__pycache__' \
+            --exclude='*.pyc' \
+            --exclude='.git' \
+            --exclude='db.sqlite3' \
+            backend/ \
+            ec2-user@${{ secrets.EC2_HOST }}:/opt/app/backend/
+
+      - name: Sync Docker & Nginx config
+        run: |
+          rsync -az \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            docker-compose.prod.yml \
+            ec2-user@${{ secrets.EC2_HOST }}:/opt/app/
+
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            deploy/nginx/ \
+            ec2-user@${{ secrets.EC2_HOST }}:/opt/app/deploy/nginx/
+
+      - name: Rebuild and restart containers
+        run: |
+          ssh -i ~/.ssh/deploy_key ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          cd /opt/app
+          docker compose -f docker-compose.prod.yml up -d --build
+          sleep 10
+          docker compose -f docker-compose.prod.yml ps
+          EOF
+
+      - name: Health check
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}/health || echo "000")
+          if [ "$STATUS" != "200" ]; then
+            echo "::warning::Health check returned $STATUS — verify deployment manually"
+          else
+            echo "Health check passed (HTTP $STATUS)"
+          fi
+
+  # ─── Deploy Frontend ────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend to S3/CloudFront
+    runs-on: ubuntu-latest
+    needs: test
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Build Flutter web
+        run: |
+          flutter pub get
+          flutter build web --release \
+            --dart-define="API_BASE_URL=http://${{ secrets.EC2_HOST }}"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Upload to S3
+        run: |
+          aws s3 sync build/web "s3://${{ secrets.S3_FRONTEND_BUCKET }}" \
+            --delete \
+            --cache-control "max-age=3600"
+
+          aws s3 cp build/web/index.html "s3://${{ secrets.S3_FRONTEND_BUCKET }}/index.html" \
+            --cache-control "no-cache, no-store, must-revalidate"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --paths "/*"

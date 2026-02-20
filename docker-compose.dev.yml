@@ -1,0 +1,63 @@
+version: '3.8'
+
+# ─── Development Environment ─────────────────────────────────
+# Start:  make dev
+# Stop:   make down
+# Logs:   make logs
+# Tests:  make test
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pedigree_db
+      POSTGRES_USER: pedigree_admin
+      POSTGRES_PASSWORD: localdevpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - dev_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pedigree_admin -d pedigree_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    env_file: .env.dev
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DEBUG=True
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Optional: run Flutter web in a container (or run natively with `flutter run`)
+  # Uncomment if you prefer a fully containerised dev stack
+  # flutter:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.flutter
+  #   ports:
+  #     - "8080:8080"
+  #   volumes:
+  #     - ./lib:/app/lib
+  #     - ./test:/app/test
+  #     - ./pubspec.yaml:/app/pubspec.yaml
+  #   depends_on:
+  #     - web
+
+volumes:
+  dev_postgres_data:
