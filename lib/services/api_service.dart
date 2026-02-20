@@ -113,6 +113,11 @@ class ApiService {
     );
   }
 
+  Future<Map<String, dynamic>> getDashboardStats() async {
+    final data = await _get('/animals/dashboard-stats/');
+    return Map<String, dynamic>.from(data);
+  }
+
   // ─── Health Records ───────────────────────────────────────────
 
   Future<List<HealthRecord>> getHealthRecords(String animalId) async {

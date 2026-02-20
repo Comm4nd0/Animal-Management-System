@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import 'dashboard_charts.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -60,6 +61,10 @@ class HomeScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 _buildStatsRow(context, provider.stats),
                 const SizedBox(height: 16),
+                if (provider.allAnimals.isNotEmpty) ...[
+                  _buildChartsSection(context, provider),
+                  const SizedBox(height: 16),
+                ],
                 _buildQuickActions(context),
                 const SizedBox(height: 16),
                 _buildRecentAnimals(context, provider),
@@ -143,6 +148,38 @@ class HomeScreen extends StatelessWidget {
           icon: Icons.category,
           color: AppTheme.accentColor,
         ),
+      ],
+    );
+  }
+
+  Widget _buildChartsSection(BuildContext context, AnimalProvider provider) {
+    final animals = provider.allAnimals;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Insights',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 8),
+        RegistrationTimelineChart(animals: animals),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: SexDistributionChart(animals: animals)),
+            const SizedBox(width: 12),
+            Expanded(child: StatusDistributionChart(animals: animals)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        BreedDistributionChart(animals: animals),
+        const SizedBox(height: 12),
+        AgeDistributionChart(animals: animals),
+        const SizedBox(height: 12),
+        GeneticDiversityCard(animals: animals),
       ],
     );
   }

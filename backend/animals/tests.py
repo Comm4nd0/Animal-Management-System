@@ -140,6 +140,26 @@ class AnimalAPITests(APITestCase):
         response = self.client.get('/api/v1/animals/', {'search': 'Luna'})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    def test_dashboard_stats(self):
+        response = self.client.get('/api/v1/animals/dashboard-stats/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.data
+        self.assertIn('registration_timeline', data)
+        self.assertIn('sex_distribution', data)
+        self.assertIn('status_distribution', data)
+        self.assertIn('breed_distribution', data)
+        self.assertIn('age_distribution', data)
+        self.assertIn('genetic_diversity', data)
+        self.assertIn('health_summary', data)
+        # Verify genetic diversity fields
+        gd = data['genetic_diversity']
+        self.assertEqual(gd['total_animals'], 1)
+        self.assertEqual(gd['unique_sires'], 0)
+        self.assertEqual(gd['unique_dams'], 0)
+        # Verify breed distribution
+        self.assertEqual(len(data['breed_distribution']), 1)
+        self.assertEqual(data['breed_distribution'][0]['label'], 'Golden Retriever')
+
 
 class GeneticsAPITests(APITestCase):
     def setUp(self):

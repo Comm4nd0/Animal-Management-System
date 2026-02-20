@@ -183,6 +183,156 @@ class AnimalViewSet(viewsets.ModelViewSet):
 
         return Response(result)
 
+    @action(detail=False, methods=['get'], url_path='dashboard-stats')
+    def dashboard_stats(self, request):
+        """
+        Aggregated stats for the dashboard charts:
+        - registration_timeline: animals added per month
+        - sex_distribution: count per sex
+        - status_distribution: count per status
+        - breed_distribution: count per breed (top 10 + others)
+        - age_distribution: count per age cohort
+        - genetic_diversity: unique sires/dams, average COI, etc.
+        - health_summary: count per health record type
+        """
+        from collections import Counter
+        from datetime import date
+
+        qs = self.get_queryset()
+
+        # ── Registration timeline (animals created per month) ─────
+        timeline_qs = (
+            qs.extra(select={'month': "strftime('%%Y-%%m', created_at)"})
+            .values('month')
+            .annotate(count=db_models.Count('id'))
+            .order_by('month')
+        )
+        registration_timeline = [
+            {'month': row['month'], 'count': row['count']}
+            for row in timeline_qs
+        ]
+
+        # ── Sex distribution ──────────────────────────────────────
+        sex_counts = qs.values('sex').annotate(count=db_models.Count('id'))
+        sex_labels = {0: 'Male', 1: 'Female', 2: 'Unknown'}
+        sex_distribution = [
+            {'label': sex_labels.get(row['sex'], 'Unknown'), 'value': row['count']}
+            for row in sex_counts
+        ]
+
+        # ── Status distribution ───────────────────────────────────
+        status_counts = qs.values('status').annotate(count=db_models.Count('id'))
+        status_labels = {0: 'Alive', 1: 'Deceased', 2: 'Sold', 3: 'Transferred'}
+        status_distribution = [
+            {'label': status_labels.get(row['status'], 'Other'), 'value': row['count']}
+            for row in status_counts
+        ]
+
+        # ── Breed distribution (top 10) ───────────────────────────
+        breed_counts = (
+            qs.values('breed')
+            .annotate(count=db_models.Count('id'))
+            .order_by('-count')
+        )
+        breed_list = list(breed_counts)
+        if len(breed_list) > 10:
+            top = breed_list[:10]
+            others = sum(b['count'] for b in breed_list[10:])
+            breed_distribution = [
+                {'label': b['breed'], 'value': b['count']} for b in top
+            ]
+            breed_distribution.append({'label': 'Other', 'value': others})
+        else:
+            breed_distribution = [
+                {'label': b['breed'], 'value': b['count']} for b in breed_list
+            ]
+
+        # ── Age distribution (cohorts) ────────────────────────────
+        today = date.today()
+        age_buckets = Counter()
+        for dob in qs.exclude(date_of_birth=None).values_list('date_of_birth', flat=True):
+            age_years = (today - dob).days / 365.25
+            if age_years < 1:
+                age_buckets['< 1 yr'] += 1
+            elif age_years < 3:
+                age_buckets['1-2 yrs'] += 1
+            elif age_years < 6:
+                age_buckets['3-5 yrs'] += 1
+            elif age_years < 10:
+                age_buckets['6-9 yrs'] += 1
+            else:
+                age_buckets['10+ yrs'] += 1
+        unknown_age = qs.filter(date_of_birth=None).count()
+        if unknown_age:
+            age_buckets['Unknown'] = unknown_age
+        age_order = ['< 1 yr', '1-2 yrs', '3-5 yrs', '6-9 yrs', '10+ yrs', 'Unknown']
+        age_distribution = [
+            {'label': label, 'value': age_buckets.get(label, 0)}
+            for label in age_order
+            if age_buckets.get(label, 0) > 0
+        ]
+
+        # ── Genetic diversity ─────────────────────────────────────
+        total = qs.count()
+        unique_sires = qs.exclude(sire=None).values('sire').distinct().count()
+        unique_dams = qs.exclude(dam=None).values('dam').distinct().count()
+        animals_with_sire = qs.exclude(sire=None).count()
+        animals_with_dam = qs.exclude(dam=None).count()
+
+        coi_values = []
+        for traits in qs.exclude(genetic_traits={}).values_list('genetic_traits', flat=True):
+            if isinstance(traits, dict) and 'coi' in traits:
+                try:
+                    coi_values.append(float(traits['coi']))
+                except (TypeError, ValueError):
+                    pass
+
+        avg_coi = sum(coi_values) / len(coi_values) if coi_values else None
+
+        # Effective population size: Ne = (4 * Nm * Nf) / (Nm + Nf)
+        effective_pop_size = None
+        if unique_sires > 0 and unique_dams > 0:
+            effective_pop_size = round(
+                (4 * unique_sires * unique_dams) / (unique_sires + unique_dams), 1
+            )
+
+        genetic_diversity = {
+            'total_animals': total,
+            'unique_sires': unique_sires,
+            'unique_dams': unique_dams,
+            'animals_with_sire': animals_with_sire,
+            'animals_with_dam': animals_with_dam,
+            'average_coi': round(avg_coi, 4) if avg_coi is not None else None,
+            'coi_sample_size': len(coi_values),
+            'effective_population_size': effective_pop_size,
+        }
+
+        # ── Health summary ────────────────────────────────────────
+        health_counts = (
+            HealthRecord.objects.filter(animal__in=qs)
+            .values('type')
+            .annotate(count=db_models.Count('id'))
+        )
+        health_labels = {
+            0: 'Vaccination', 1: 'Examination', 2: 'Surgery',
+            3: 'Medication', 4: 'Lab Test', 5: 'Deworming',
+            6: 'Dental', 7: 'Other',
+        }
+        health_summary = [
+            {'label': health_labels.get(row['type'], 'Other'), 'value': row['count']}
+            for row in health_counts
+        ]
+
+        return Response({
+            'registration_timeline': registration_timeline,
+            'sex_distribution': sex_distribution,
+            'status_distribution': status_distribution,
+            'breed_distribution': breed_distribution,
+            'age_distribution': age_distribution,
+            'genetic_diversity': genetic_diversity,
+            'health_summary': health_summary,
+        })
+
     @action(detail=False, methods=['get'])
     def search(self, request):
         """
