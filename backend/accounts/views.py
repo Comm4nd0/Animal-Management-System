@@ -1,10 +1,15 @@
+import logging
+
+from django.conf import settings
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+from django.core.mail import send_mail
 from rest_framework import viewsets, status, permissions
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import UserProfile, ServiceTier, UserRole, get_tier_limits, get_all_tier_limits
+from .models import UserProfile, ServiceTier, UserRole, get_tier_limits, get_all_tier_limits, PasswordResetToken
 from .permissions import IsOwnerOrAdmin
 from .serializers import (
     UserProfileSerializer,
@@ -14,7 +19,12 @@ from .serializers import (
     TeamMemberSerializer,
     InviteUserSerializer,
     UpdateRoleSerializer,
+    RequestPasswordResetSerializer,
+    ConfirmPasswordResetSerializer,
+    ChangePasswordSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AccountViewSet(viewsets.ViewSet):
@@ -207,6 +217,143 @@ class AccountViewSet(viewsets.ViewSet):
         )
 
         return Response(UserProfileSerializer(profile).data)
+
+    # ─── Password Reset ─────────────────────────────────────────
+
+    @action(detail=False, methods=['post'], url_path='request-password-reset')
+    def request_password_reset(self, request):
+        """
+        Request a password reset code.
+
+        POST /api/v1/accounts/request-password-reset/
+        Body: {"email": "user@example.com"}
+
+        Sends a 6-digit code to the user's email. The code expires in 15 minutes.
+        Always returns 200 to avoid leaking whether an email is registered.
+        """
+        serializer = RequestPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data['email']
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Don't reveal whether the email exists
+            return Response(
+                {'message': 'If an account with that email exists, a reset code has been sent.'},
+            )
+
+        # Invalidate any previous unused tokens for this user
+        PasswordResetToken.objects.filter(user=user, used=False).update(used=True)
+
+        # Create a new token
+        token = PasswordResetToken.objects.create(user=user)
+
+        # Send the email
+        try:
+            send_mail(
+                subject='Pedigree Manager - Password Reset Code',
+                message=(
+                    f'Your password reset code is: {token.code}\n\n'
+                    f'This code will expire in 15 minutes.\n\n'
+                    f'If you did not request a password reset, please ignore this email.'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[email],
+                fail_silently=False,
+            )
+        except Exception:
+            logger.exception('Failed to send password reset email to %s', email)
+            return Response(
+                {'error': 'Failed to send email. Please try again later.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        return Response(
+            {'message': 'If an account with that email exists, a reset code has been sent.'},
+        )
+
+    @action(detail=False, methods=['post'], url_path='confirm-password-reset')
+    def confirm_password_reset(self, request):
+        """
+        Confirm a password reset with the 6-digit code.
+
+        POST /api/v1/accounts/confirm-password-reset/
+        Body: {"email": "user@example.com", "code": "123456", "new_password": "..."}
+        """
+        serializer = ConfirmPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email']
+        code = serializer.validated_data['code']
+        new_password = serializer.validated_data['new_password']
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'Invalid email or code.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Find the most recent unused, unexpired token with matching code
+        token = PasswordResetToken.objects.filter(
+            user=user,
+            code=code,
+            used=False,
+        ).order_by('-created_at').first()
+
+        if token is None or not token.is_valid:
+            return Response(
+                {'error': 'Invalid or expired code. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Mark token as used and set the new password
+        token.used = True
+        token.save(update_fields=['used'])
+
+        user.set_password(new_password)
+        user.save()
+
+        # Invalidate existing auth tokens so user must log in with new password
+        Token.objects.filter(user=user).delete()
+
+        return Response({'message': 'Password has been reset successfully.'})
+
+    @action(detail=False, methods=['post'], url_path='change-password',
+            permission_classes=[permissions.IsAuthenticated])
+    def change_password(self, request):
+        """
+        Change password for an authenticated user.
+
+        POST /api/v1/accounts/change-password/
+        Body: {"current_password": "...", "new_password": "..."}
+        """
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        current_password = serializer.validated_data['current_password']
+        new_password = serializer.validated_data['new_password']
+
+        if not user.check_password(current_password):
+            return Response(
+                {'error': 'Current password is incorrect.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        # Re-create the auth token
+        Token.objects.filter(user=user).delete()
+        new_token, _ = Token.objects.get_or_create(user=user)
+
+        return Response({
+            'message': 'Password changed successfully.',
+            'token': new_token.key,
+        })
 
     # ─── Team Management ──────────────────────────────────────────
 

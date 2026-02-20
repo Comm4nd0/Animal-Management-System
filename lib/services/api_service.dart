@@ -142,6 +142,39 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
+  // ─── Password Reset ─────────────────────────────────────────
+
+  Future<Map<String, dynamic>> requestPasswordReset(String email) async {
+    final data = await _post('/accounts/request-password-reset/', {
+      'email': email,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> confirmPasswordReset(
+    String email,
+    String code,
+    String newPassword,
+  ) async {
+    final data = await _post('/accounts/confirm-password-reset/', {
+      'email': email,
+      'code': code,
+      'new_password': newPassword,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final data = await _post('/accounts/change-password/', {
+      'current_password': currentPassword,
+      'new_password': newPassword,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
   // ─── Health Records ───────────────────────────────────────────
 
   Future<List<HealthRecord>> getHealthRecords(String animalId) async {

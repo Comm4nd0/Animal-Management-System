@@ -5,7 +5,9 @@ import 'models/models.dart';
 import 'services/animal_provider.dart';
 import 'utils/app_theme.dart';
 import 'screens/auth/landing_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/animals/animal_list_screen.dart';
 import 'screens/animals/animal_detail_screen.dart';
@@ -79,6 +81,15 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/register':
         return MaterialPageRoute(
           builder: (_) => const RegistrationScreen(),
+        );
+      case '/forgot-password':
+        return MaterialPageRoute(
+          builder: (_) => const ForgotPasswordScreen(),
+        );
+      case '/reset-password':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const ResetPasswordScreen(),
         );
 
       // ─── Authenticated routes (dashboard) ─────────────────────

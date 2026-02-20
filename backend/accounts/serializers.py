@@ -183,3 +183,21 @@ class ServiceTierInfoSerializer(serializers.Serializer):
 
 class ChangeTierSerializer(serializers.Serializer):
     service_tier = serializers.ChoiceField(choices=ServiceTier.choices)
+
+
+class RequestPasswordResetSerializer(serializers.Serializer):
+    """Accepts an email address to send a password reset code to."""
+    email = serializers.EmailField()
+
+
+class ConfirmPasswordResetSerializer(serializers.Serializer):
+    """Accepts email, 6-digit code, and new password to complete the reset."""
+    email = serializers.EmailField()
+    code = serializers.CharField(max_length=6, min_length=6)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """For logged-in users changing their own password."""
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)

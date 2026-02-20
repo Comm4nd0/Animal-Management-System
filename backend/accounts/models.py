@@ -1,6 +1,8 @@
+import secrets
 import uuid
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class ServiceTier(models.IntegerChoices):
@@ -369,3 +371,47 @@ class UserProfile(models.Model):
             )
 
         return True, ''
+
+
+def _generate_otp():
+    """Generate a 6-digit numeric OTP code."""
+    return f'{secrets.randbelow(1000000):06d}'
+
+
+def _default_expiry():
+    """Return a datetime 15 minutes from now."""
+    return timezone.now() + timezone.timedelta(minutes=15)
+
+
+class PasswordResetToken(models.Model):
+    """
+    Stores a one-time 6-digit code for password resets.
+
+    Codes expire after 15 minutes and are single-use.
+    Only the most recent code for a given user is valid; requesting
+    a new code invalidates any previous ones.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='password_reset_tokens',
+    )
+    code = models.CharField(max_length=6, default=_generate_otp)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(default=_default_expiry)
+    used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Reset code for {self.user.username} (expires {self.expires_at})'
+
+    @property
+    def is_expired(self):
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_valid(self):
+        return not self.used and not self.is_expired
