@@ -35,8 +35,11 @@ ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-co
 # Add ec2-user to docker group
 usermod -aG docker ec2-user
 
-# Install git, rsync, and PostgreSQL client (for DB creation)
-dnf install -y git rsync postgresql16
+# Install git, rsync, SSM agent and PostgreSQL client (for DB creation)
+dnf install -y git rsync amazon-ssm-agent postgresql16
+
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
 
 # ─── App directory ────────────────────────────────────────────
 mkdir -p /opt/app/deploy/nginx
