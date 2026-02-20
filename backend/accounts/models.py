@@ -306,7 +306,7 @@ class UserProfile(models.Model):
     def get_animal_count(self):
         """Current number of animals owned by this user."""
         from animals.models import Animal
-        return Animal.objects.filter(owner=self).count()
+        return Animal.objects.filter(account=self).count()
 
     def can_add_animal(self):
         """Check if the user can add another animal within their tier limit."""
