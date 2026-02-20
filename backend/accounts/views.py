@@ -1,4 +1,6 @@
+from django.contrib.auth import authenticate
 from rest_framework import viewsets, status, permissions
+from rest_framework.authtoken.models import Token
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -29,14 +31,58 @@ class AccountViewSet(viewsets.ViewSet):
     remove_user:    POST /api/v1/accounts/remove-user/
     """
 
+    @action(detail=False, methods=['post'], url_path='login')
+    def login(self, request):
+        """Authenticate and return an auth token."""
+        username = request.data.get('username', '')
+        password = request.data.get('password', '')
+
+        # Allow login with email as username
+        if '@' in username:
+            from django.contrib.auth.models import User
+            try:
+                user = User.objects.get(email=username)
+                username = user.username
+            except User.DoesNotExist:
+                pass
+
+        user = authenticate(username=username, password=password)
+        if user is None:
+            return Response(
+                {'error': 'Invalid credentials'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        token, _ = Token.objects.get_or_create(user=user)
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=user)
+
+        return Response({
+            'token': token.key,
+            'user': UserProfileSerializer(profile).data,
+        })
+
+    @action(detail=False, methods=['post'], url_path='logout')
+    def logout(self, request):
+        """Delete the user's auth token."""
+        if request.user.is_authenticated:
+            Token.objects.filter(user=request.user).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     @action(detail=False, methods=['post'], url_path='register')
     def register(self, request):
         """Create a new user account with a selected service tier."""
         serializer = UserRegistrationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         profile = serializer.save()
+        token, _ = Token.objects.get_or_create(user=profile.user)
         return Response(
-            UserProfileSerializer(profile).data,
+            {
+                'token': token.key,
+                'user': UserProfileSerializer(profile).data,
+            },
             status=status.HTTP_201_CREATED,
         )
 

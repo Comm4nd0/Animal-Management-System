@@ -483,3 +483,149 @@ class CustomFieldDefinition(models.Model):
             self.field_key = self.name.lower().replace(' ', '_').replace('-', '_')
             self.field_key = re.sub(r'[^a-z0-9_]', '', self.field_key)
         super().save(*args, **kwargs)
+
+
+class WeightRecord(models.Model):
+    """Tracks weight/height measurements over time for growth curves."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    animal = models.ForeignKey(
+        Animal, on_delete=models.CASCADE, related_name='weight_records'
+    )
+    date = models.DateField()
+    weight = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text='Weight in kg'
+    )
+    height = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text='Height in cm'
+    )
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date']
+        indexes = [
+            models.Index(fields=['animal', '-date']),
+        ]
+
+    def __str__(self):
+        return f'{self.animal.name} - {self.date}'
+
+
+class ShowResult(models.Model):
+    """Records show/competition results for pedigree animals."""
+
+    class Placement(models.IntegerChoices):
+        FIRST = 1, '1st Place'
+        SECOND = 2, '2nd Place'
+        THIRD = 3, '3rd Place'
+        FOURTH = 4, '4th Place'
+        FIFTH = 5, '5th Place'
+        RESERVE = 10, 'Reserve'
+        CHAMPION = 20, 'Champion'
+        BEST_IN_SHOW = 30, 'Best in Show'
+        PARTICIPATED = 99, 'Participated'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    animal = models.ForeignKey(
+        Animal, on_delete=models.CASCADE, related_name='show_results'
+    )
+    show_name = models.CharField(max_length=300)
+    show_date = models.DateField()
+    class_name = models.CharField(
+        max_length=200, blank=True, default='',
+        help_text='e.g. Open, Yearling, Junior Handler'
+    )
+    placement = models.IntegerField(
+        choices=Placement.choices, default=Placement.PARTICIPATED
+    )
+    judge = models.CharField(max_length=200, blank=True, default='')
+    points = models.DecimalField(
+        max_digits=8, decimal_places=2, null=True, blank=True,
+        help_text='Points or score awarded'
+    )
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-show_date']
+        indexes = [
+            models.Index(fields=['animal', '-show_date']),
+        ]
+
+    def __str__(self):
+        return f'{self.animal.name} - {self.show_name} ({self.get_placement_display()})'
+
+
+class FinancialRecord(models.Model):
+    """Tracks income and expenses per animal."""
+
+    class TransactionType(models.IntegerChoices):
+        EXPENSE = 0, 'Expense'
+        INCOME = 1, 'Income'
+
+    class Category(models.IntegerChoices):
+        FEED = 0, 'Feed'
+        VETERINARY = 1, 'Veterinary'
+        REGISTRATION = 2, 'Registration'
+        INSURANCE = 3, 'Insurance'
+        TRANSPORT = 4, 'Transport'
+        EQUIPMENT = 5, 'Equipment'
+        STUD_FEE = 6, 'Stud Fee'
+        SALE = 7, 'Sale'
+        PRIZE_MONEY = 8, 'Prize Money'
+        OTHER = 99, 'Other'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    animal = models.ForeignKey(
+        Animal, on_delete=models.CASCADE, related_name='financial_records'
+    )
+    date = models.DateField()
+    transaction_type = models.IntegerField(choices=TransactionType.choices)
+    category = models.IntegerField(choices=Category.choices, default=Category.OTHER)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    description = models.CharField(max_length=500, blank=True, default='')
+    receipt = models.FileField(upload_to='receipts/', null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date']
+        indexes = [
+            models.Index(fields=['animal', '-date']),
+        ]
+
+    def __str__(self):
+        return f'{self.animal.name} - {self.get_category_display()} ({self.amount})'
+
+
+class DocumentAttachment(models.Model):
+    """Stores documents (certificates, contracts, DNA results, etc.) per animal."""
+
+    class DocumentType(models.IntegerChoices):
+        PEDIGREE_CERT = 0, 'Pedigree Certificate'
+        REGISTRATION = 1, 'Registration Paper'
+        DNA_TEST = 2, 'DNA Test Result'
+        HEALTH_CERT = 3, 'Health Certificate'
+        INSURANCE = 4, 'Insurance'
+        CONTRACT = 5, 'Contract'
+        PHOTO_ID = 6, 'Photo ID'
+        OTHER = 99, 'Other'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    animal = models.ForeignKey(
+        Animal, on_delete=models.CASCADE, related_name='documents'
+    )
+    title = models.CharField(max_length=300)
+    document_type = models.IntegerField(
+        choices=DocumentType.choices, default=DocumentType.OTHER
+    )
+    file = models.FileField(upload_to='animal_documents/')
+    notes = models.TextField(blank=True, default='')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f'{self.title} - {self.animal.name}'

@@ -10,3 +10,7 @@ export 'team_member.dart';
 export 'custom_field_definition.dart';
 export 'contact.dart';
 export 'animal_image.dart';
+export 'weight_record.dart';
+export 'show_result.dart';
+export 'financial_record.dart';
+export 'document_attachment.dart';

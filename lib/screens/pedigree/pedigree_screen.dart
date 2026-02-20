@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:printing/printing.dart';
 import '../../services/animal_provider.dart';
+import '../../services/pedigree_pdf_service.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
 
@@ -40,6 +42,11 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
       appBar: AppBar(
         title: Text(_pedigreeTree?.animal.name ?? 'Pedigree'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            tooltip: 'Export PDF Certificate',
+            onPressed: _pedigreeTree == null ? null : _exportPdf,
+          ),
           PopupMenuButton<int>(
             icon: const Icon(Icons.layers),
             tooltip: 'Generations',
@@ -67,6 +74,23 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
                     child: _buildPedigreeTree(_pedigreeTree!, 0),
                   ),
                 ),
+    );
+  }
+
+  Future<void> _exportPdf() async {
+    final provider = context.read<AnimalProvider>();
+    final animal = provider.getAnimalById(widget.animalId);
+    if (animal == null) return;
+
+    final pdfBytes = await PedigreePdfService.generateCertificate(
+      animal: animal,
+      allAnimals: provider.allAnimals,
+      generations: _generations,
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (_) => pdfBytes,
+      name: '${animal.name}_pedigree',
     );
   }
 

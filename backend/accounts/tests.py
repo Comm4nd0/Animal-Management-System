@@ -193,6 +193,40 @@ class UserRoleModelTests(TestCase):
         self.assertEqual(self.owner.max_animals, 500)
 
 
+class AuthenticationTests(APITestCase):
+    def test_login_with_username(self):
+        User.objects.create_user('farmer', 'f@f.com', 'pass12345')
+        response = self.client.post('/api/v1/accounts/login/', {
+            'username': 'farmer',
+            'password': 'pass12345',
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertIn('token', response.data)
+        self.assertIn('user', response.data)
+
+    def test_login_with_email(self):
+        User.objects.create_user('farmer2', 'farmer@test.com', 'pass12345')
+        response = self.client.post('/api/v1/accounts/login/', {
+            'username': 'farmer@test.com',
+            'password': 'pass12345',
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        self.assertIn('token', response.data)
+
+    def test_login_invalid_credentials(self):
+        response = self.client.post('/api/v1/accounts/login/', {
+            'username': 'nobody',
+            'password': 'wrong',
+        }, format='json')
+        self.assertEqual(response.status_code, http_status.HTTP_401_UNAUTHORIZED)
+
+    def test_logout(self):
+        user = User.objects.create_user('logmeout', 'l@t.com', 'pass12345')
+        self.client.force_authenticate(user=user)
+        response = self.client.post('/api/v1/accounts/logout/')
+        self.assertEqual(response.status_code, http_status.HTTP_204_NO_CONTENT)
+
+
 class AccountAPITests(APITestCase):
     def test_register_account(self):
         response = self.client.post('/api/v1/accounts/register/', {

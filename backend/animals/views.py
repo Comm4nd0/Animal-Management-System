@@ -9,7 +9,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from accounts.permissions import ReadOnlyForReadOnlyUsers
-from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
+from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact, WeightRecord, ShowResult, FinancialRecord, DocumentAttachment
 from .serializers import (
     AnimalListSerializer,
     AnimalDetailSerializer,
@@ -19,6 +19,10 @@ from .serializers import (
     LitterSerializer,
     CustomFieldDefinitionSerializer,
     ContactSerializer,
+    WeightRecordSerializer,
+    ShowResultSerializer,
+    FinancialRecordSerializer,
+    DocumentAttachmentSerializer,
 )
 
 
@@ -846,3 +850,47 @@ class ContactViewSet(viewsets.ModelViewSet):
             serializer.save(account=profile)
         else:
             serializer.save()
+
+
+class WeightRecordViewSet(viewsets.ModelViewSet):
+    """CRUD API for weight/growth tracking records."""
+    queryset = WeightRecord.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
+    serializer_class = WeightRecordSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['animal']
+    ordering_fields = ['date', 'created_at']
+    ordering = ['-date']
+
+
+class ShowResultViewSet(viewsets.ModelViewSet):
+    """CRUD API for show/competition results."""
+    queryset = ShowResult.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
+    serializer_class = ShowResultSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['animal', 'placement']
+    ordering_fields = ['show_date', 'created_at']
+    ordering = ['-show_date']
+
+
+class FinancialRecordViewSet(viewsets.ModelViewSet):
+    """CRUD API for financial records (income/expenses)."""
+    queryset = FinancialRecord.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
+    serializer_class = FinancialRecordSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['animal', 'transaction_type', 'category']
+    ordering_fields = ['date', 'created_at']
+    ordering = ['-date']
+
+
+class DocumentAttachmentViewSet(viewsets.ModelViewSet):
+    """CRUD API for document attachments."""
+    queryset = DocumentAttachment.objects.all()
+    permission_classes = [ReadOnlyForReadOnlyUsers]
+    serializer_class = DocumentAttachmentSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['animal', 'document_type']
+    ordering_fields = ['uploaded_at']
+    ordering = ['-uploaded_at']

@@ -1,11 +1,14 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/models.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
+import 'notification_service.dart';
 import 'pedigree_validator.dart';
+import 'sync_service.dart';
 
 /// Central state management provider for all animal-related data.
 class AnimalProvider extends ChangeNotifier {
@@ -28,6 +31,25 @@ class AnimalProvider extends ChangeNotifier {
   List<AnimalImage> _animalImages = [];
   // Cache of profile image paths keyed by animal ID
   final Map<String, String?> _profileImageCache = {};
+
+  // ─── Theme Mode ─────────────────────────────────────────────
+  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode get themeMode => _themeMode;
+
+  void setThemeMode(ThemeMode mode) {
+    _themeMode = mode;
+    notifyListeners();
+  }
+
+  // ─── Auth State ─────────────────────────────────────────────
+  String? _authToken;
+  String? get authToken => _authToken;
+  bool get isLoggedIn => _authToken != null;
+
+  void setAuthToken(String? token) {
+    _authToken = token;
+    notifyListeners();
+  }
 
   // ─── Account / Tier / Roles ──────────────────────────────────
   UserProfile? _userProfile;
@@ -184,8 +206,40 @@ class AnimalProvider extends ChangeNotifier {
       _stats = await _db.getAnimalStats();
       _customFieldDefinitions = await _db.getCustomFieldDefinitions();
       await loadProfileImageCache();
+
+      // Schedule health reminder notifications
+      try {
+        await NotificationService().scheduleHealthReminders();
+      } catch (_) {
+        // Notifications not available on this platform
+      }
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ─── Sync ──────────────────────────────────────────────────────
+
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+  DateTime? _lastSyncTime;
+  DateTime? get lastSyncTime => _lastSyncTime;
+
+  /// Syncs local data with the remote API, then reloads all data.
+  Future<SyncResult> syncWithApi() async {
+    _isSyncing = true;
+    notifyListeners();
+    try {
+      final syncService = SyncService();
+      final result = await syncService.syncAll();
+      if (result.isSuccess) {
+        _lastSyncTime = DateTime.now();
+        await loadAll();
+      }
+      return result;
+    } finally {
+      _isSyncing = false;
       notifyListeners();
     }
   }
@@ -483,6 +537,94 @@ class AnimalProvider extends ChangeNotifier {
       _animals = await _db.getAllAnimals();
     }
 
+    notifyListeners();
+  }
+
+  // ─── Weight Records ────────────────────────────────────────────
+
+  List<WeightRecord> _weightRecords = [];
+  List<WeightRecord> get weightRecords => _weightRecords;
+
+  Future<void> loadWeightRecords(String animalId) async {
+    _weightRecords = await _db.getWeightRecords(animalId);
+    notifyListeners();
+  }
+
+  Future<void> addWeightRecord(WeightRecord record) async {
+    await _db.insertWeightRecord(record);
+    _weightRecords = await _db.getWeightRecords(record.animalId);
+    notifyListeners();
+  }
+
+  Future<void> deleteWeightRecord(String id, String animalId) async {
+    await _db.deleteWeightRecord(id);
+    _weightRecords = await _db.getWeightRecords(animalId);
+    notifyListeners();
+  }
+
+  // ─── Show Results ─────────────────────────────────────────────
+
+  List<ShowResult> _showResults = [];
+  List<ShowResult> get showResults => _showResults;
+
+  Future<void> loadShowResults(String animalId) async {
+    _showResults = await _db.getShowResults(animalId);
+    notifyListeners();
+  }
+
+  Future<void> addShowResult(ShowResult result) async {
+    await _db.insertShowResult(result);
+    _showResults = await _db.getShowResults(result.animalId);
+    notifyListeners();
+  }
+
+  Future<void> deleteShowResult(String id, String animalId) async {
+    await _db.deleteShowResult(id);
+    _showResults = await _db.getShowResults(animalId);
+    notifyListeners();
+  }
+
+  // ─── Financial Records ────────────────────────────────────────
+
+  List<FinancialRecord> _financialRecords = [];
+  List<FinancialRecord> get financialRecords => _financialRecords;
+
+  Future<void> loadFinancialRecords(String animalId) async {
+    _financialRecords = await _db.getFinancialRecords(animalId);
+    notifyListeners();
+  }
+
+  Future<void> addFinancialRecord(FinancialRecord record) async {
+    await _db.insertFinancialRecord(record);
+    _financialRecords = await _db.getFinancialRecords(record.animalId);
+    notifyListeners();
+  }
+
+  Future<void> deleteFinancialRecord(String id, String animalId) async {
+    await _db.deleteFinancialRecord(id);
+    _financialRecords = await _db.getFinancialRecords(animalId);
+    notifyListeners();
+  }
+
+  // ─── Document Attachments ────────────────────────────────────
+
+  List<DocumentAttachment> _documentAttachments = [];
+  List<DocumentAttachment> get documentAttachments => _documentAttachments;
+
+  Future<void> loadDocumentAttachments(String animalId) async {
+    _documentAttachments = await _db.getDocumentAttachments(animalId);
+    notifyListeners();
+  }
+
+  Future<void> addDocumentAttachment(DocumentAttachment doc) async {
+    await _db.insertDocumentAttachment(doc);
+    _documentAttachments = await _db.getDocumentAttachments(doc.animalId);
+    notifyListeners();
+  }
+
+  Future<void> deleteDocumentAttachment(String id, String animalId) async {
+    await _db.deleteDocumentAttachment(id);
+    _documentAttachments = await _db.getDocumentAttachments(animalId);
     notifyListeners();
   }
 

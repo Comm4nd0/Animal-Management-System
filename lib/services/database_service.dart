@@ -19,7 +19,7 @@ class DatabaseService {
     final path = join(dbPath, 'pedigree_manager.db');
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -166,6 +166,10 @@ class DatabaseService {
 
     await _createAnimalImagesTable(db);
     await _createTeamMembersTable(db);
+    await _createWeightRecordsTable(db);
+    await _createShowResultsTable(db);
+    await _createFinancialRecordsTable(db);
+    await _createDocumentAttachmentsTable(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -174,6 +178,12 @@ class DatabaseService {
     }
     if (oldVersion < 3) {
       await _createTeamMembersTable(db);
+    }
+    if (oldVersion < 4) {
+      await _createWeightRecordsTable(db);
+      await _createShowResultsTable(db);
+      await _createFinancialRecordsTable(db);
+      await _createDocumentAttachmentsTable(db);
     }
   }
 
@@ -205,6 +215,79 @@ class DatabaseService {
         createdAt INTEGER NOT NULL
       )
     ''');
+  }
+
+  Future<void> _createWeightRecordsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS weight_records (
+        id TEXT PRIMARY KEY,
+        animalId TEXT NOT NULL,
+        date INTEGER NOT NULL,
+        weight REAL,
+        height REAL,
+        notes TEXT DEFAULT '',
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (animalId) REFERENCES animals (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_weight_animal ON weight_records (animalId, date)');
+  }
+
+  Future<void> _createShowResultsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS show_results (
+        id TEXT PRIMARY KEY,
+        animalId TEXT NOT NULL,
+        showName TEXT NOT NULL,
+        showDate INTEGER NOT NULL,
+        className TEXT DEFAULT '',
+        placement INTEGER DEFAULT 99,
+        judge TEXT DEFAULT '',
+        points REAL,
+        notes TEXT DEFAULT '',
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (animalId) REFERENCES animals (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_show_animal ON show_results (animalId, showDate)');
+  }
+
+  Future<void> _createFinancialRecordsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS financial_records (
+        id TEXT PRIMARY KEY,
+        animalId TEXT NOT NULL,
+        date INTEGER NOT NULL,
+        transactionType INTEGER NOT NULL DEFAULT 0,
+        category INTEGER NOT NULL DEFAULT 99,
+        amount REAL NOT NULL,
+        description TEXT DEFAULT '',
+        receiptPath TEXT,
+        createdAt INTEGER NOT NULL,
+        FOREIGN KEY (animalId) REFERENCES animals (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_financial_animal ON financial_records (animalId, date)');
+  }
+
+  Future<void> _createDocumentAttachmentsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS document_attachments (
+        id TEXT PRIMARY KEY,
+        animalId TEXT NOT NULL,
+        title TEXT NOT NULL,
+        documentType INTEGER NOT NULL DEFAULT 99,
+        filePath TEXT NOT NULL,
+        notes TEXT DEFAULT '',
+        uploadedAt INTEGER NOT NULL,
+        FOREIGN KEY (animalId) REFERENCES animals (id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_document_animal ON document_attachments (animalId)');
   }
 
   // ─── Animal CRUD ────────────────────────────────────────────────
@@ -543,6 +626,94 @@ class DatabaseService {
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
+  }
+
+  // ─── Weight Records CRUD ─────────────────────────────────────
+
+  Future<void> insertWeightRecord(WeightRecord record) async {
+    final db = await database;
+    await db.insert('weight_records', record.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteWeightRecord(String id) async {
+    final db = await database;
+    await db.delete('weight_records', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<WeightRecord>> getWeightRecords(String animalId) async {
+    final db = await database;
+    final maps = await db.query('weight_records',
+        where: 'animalId = ?',
+        whereArgs: [animalId],
+        orderBy: 'date DESC');
+    return maps.map((m) => WeightRecord.fromMap(m)).toList();
+  }
+
+  // ─── Show Results CRUD ────────────────────────────────────────
+
+  Future<void> insertShowResult(ShowResult result) async {
+    final db = await database;
+    await db.insert('show_results', result.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteShowResult(String id) async {
+    final db = await database;
+    await db.delete('show_results', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<ShowResult>> getShowResults(String animalId) async {
+    final db = await database;
+    final maps = await db.query('show_results',
+        where: 'animalId = ?',
+        whereArgs: [animalId],
+        orderBy: 'showDate DESC');
+    return maps.map((m) => ShowResult.fromMap(m)).toList();
+  }
+
+  // ─── Financial Records CRUD ───────────────────────────────────
+
+  Future<void> insertFinancialRecord(FinancialRecord record) async {
+    final db = await database;
+    await db.insert('financial_records', record.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteFinancialRecord(String id) async {
+    final db = await database;
+    await db.delete('financial_records', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<FinancialRecord>> getFinancialRecords(String animalId) async {
+    final db = await database;
+    final maps = await db.query('financial_records',
+        where: 'animalId = ?',
+        whereArgs: [animalId],
+        orderBy: 'date DESC');
+    return maps.map((m) => FinancialRecord.fromMap(m)).toList();
+  }
+
+  // ─── Document Attachments CRUD ────────────────────────────────
+
+  Future<void> insertDocumentAttachment(DocumentAttachment doc) async {
+    final db = await database;
+    await db.insert('document_attachments', doc.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteDocumentAttachment(String id) async {
+    final db = await database;
+    await db.delete('document_attachments', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<List<DocumentAttachment>> getDocumentAttachments(String animalId) async {
+    final db = await database;
+    final maps = await db.query('document_attachments',
+        where: 'animalId = ?',
+        whereArgs: [animalId],
+        orderBy: 'uploadedAt DESC');
+    return maps.map((m) => DocumentAttachment.fromMap(m)).toList();
   }
 
   // ─── Stats ─────────────────────────────────────────────────────

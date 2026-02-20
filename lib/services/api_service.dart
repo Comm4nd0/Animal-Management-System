@@ -19,6 +19,7 @@ class ApiService {
   );
 
   final HttpClient _client = HttpClient();
+  String? authToken;
 
   // ─── HTTP Helpers ─────────────────────────────────────────────
 
@@ -26,6 +27,9 @@ class ApiService {
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
     final request = await _client.getUrl(uri);
     request.headers.set('Content-Type', 'application/json');
+    if (authToken != null) {
+      request.headers.set('Authorization', 'Token $authToken');
+    }
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -38,6 +42,9 @@ class ApiService {
     final uri = Uri.parse('$baseUrl$path');
     final request = await _client.postUrl(uri);
     request.headers.set('Content-Type', 'application/json');
+    if (authToken != null) {
+      request.headers.set('Authorization', 'Token $authToken');
+    }
     request.write(jsonEncode(data));
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
@@ -51,6 +58,9 @@ class ApiService {
     final uri = Uri.parse('$baseUrl$path');
     final request = await _client.putUrl(uri);
     request.headers.set('Content-Type', 'application/json');
+    if (authToken != null) {
+      request.headers.set('Authorization', 'Token $authToken');
+    }
     request.write(jsonEncode(data));
     final response = await request.close();
     final body = await response.transform(utf8.decoder).join();
@@ -63,6 +73,10 @@ class ApiService {
   Future<void> _delete(String path) async {
     final uri = Uri.parse('$baseUrl$path');
     final request = await _client.deleteUrl(uri);
+    request.headers.set('Content-Type', 'application/json');
+    if (authToken != null) {
+      request.headers.set('Authorization', 'Token $authToken');
+    }
     final response = await request.close();
     await response.drain();
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -118,6 +132,16 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
+  // ─── Authentication ─────────────────────────────────────────
+
+  Future<Map<String, dynamic>> login(String email, String password) async {
+    final data = await _post('/accounts/login/', {
+      'username': email,
+      'password': password,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
   // ─── Health Records ───────────────────────────────────────────
 
   Future<List<HealthRecord>> getHealthRecords(String animalId) async {
@@ -136,6 +160,12 @@ class ApiService {
   }
 
   // ─── Breeding Records ────────────────────────────────────────
+
+  Future<List<BreedingRecord>> getBreedingRecords() async {
+    final data = await _get('/breeding-records/');
+    final results = data['results'] as List? ?? data as List;
+    return results.map((m) => _breedingRecordFromApi(m)).toList();
+  }
 
   Future<List<BreedingRecord>> getActiveBreedings() async {
     final data = await _get('/breeding-records/active/');

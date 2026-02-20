@@ -5,6 +5,10 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import 'weight_records_tab.dart';
+import 'show_results_tab.dart';
+import 'financial_records_tab.dart';
+import 'documents_tab.dart';
 
 class AnimalDetailScreen extends StatefulWidget {
   final String animalId;
@@ -22,11 +26,15 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 9, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<AnimalProvider>();
       p.loadHealthRecords(widget.animalId);
       p.loadAnimalImages(widget.animalId);
+      p.loadWeightRecords(widget.animalId);
+      p.loadShowResults(widget.animalId);
+      p.loadFinancialRecords(widget.animalId);
+      p.loadDocumentAttachments(widget.animalId);
     });
   }
 
@@ -114,6 +122,10 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                   Tab(text: 'Info'),
                   Tab(text: 'Photos'),
                   Tab(text: 'Health'),
+                  Tab(text: 'Growth'),
+                  Tab(text: 'Shows'),
+                  Tab(text: 'Finances'),
+                  Tab(text: 'Docs'),
                   Tab(text: 'Lineage'),
                   Tab(text: 'Notes'),
                 ],
@@ -125,6 +137,10 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                     _buildInfoTab(context, animal, sire, dam),
                     _buildPhotosTab(context, animal, provider),
                     _buildHealthTab(context, provider),
+                    WeightRecordsTab(animalId: widget.animalId),
+                    ShowResultsTab(animalId: widget.animalId),
+                    FinancialRecordsTab(animalId: widget.animalId),
+                    DocumentsTab(animalId: widget.animalId),
                     _buildLineageTab(context, animal, sire, dam, provider),
                     _buildNotesTab(context, animal),
                   ],

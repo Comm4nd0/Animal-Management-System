@@ -34,6 +34,11 @@ class HomeScreen extends StatelessWidget {
             onPressed: () => Navigator.pushNamed(context, '/animals'),
           ),
           IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
+          IconButton(
             icon: const Icon(Icons.logout),
             tooltip: 'Log Out',
             onPressed: () {
@@ -180,6 +185,8 @@ class HomeScreen extends StatelessWidget {
         AgeDistributionChart(animals: animals),
         const SizedBox(height: 12),
         GeneticDiversityCard(animals: animals),
+        const SizedBox(height: 12),
+        _HealthRemindersSection(provider: provider),
       ],
     );
   }
@@ -380,6 +387,46 @@ class HomeScreen extends StatelessWidget {
           );
         }),
       ],
+    );
+  }
+}
+
+class _HealthRemindersSection extends StatefulWidget {
+  final AnimalProvider provider;
+  const _HealthRemindersSection({required this.provider});
+
+  @override
+  State<_HealthRemindersSection> createState() => _HealthRemindersSectionState();
+}
+
+class _HealthRemindersSectionState extends State<_HealthRemindersSection> {
+  List<HealthRecord> _upcoming = [];
+  List<HealthRecord> _overdue = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadReminders();
+  }
+
+  Future<void> _loadReminders() async {
+    final all = await widget.provider.getUpcomingHealthReminders();
+    if (!mounted) return;
+    final now = DateTime.now();
+    setState(() {
+      _overdue = all.where((r) =>
+          r.nextDueDate != null && r.nextDueDate!.isBefore(now)).toList();
+      _upcoming = all.where((r) =>
+          r.nextDueDate != null && !r.nextDueDate!.isBefore(now)).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return HealthRemindersCard(
+      upcoming: _upcoming,
+      overdue: _overdue,
+      animals: widget.provider.allAnimals,
     );
   }
 }

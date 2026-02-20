@@ -24,9 +24,19 @@ import 'screens/data_audit/data_audit_screen.dart';
 import 'screens/import_export/import_screen.dart';
 import 'screens/import_export/export_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
+import 'screens/settings/settings_screen.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize local notifications (no-op on web)
+  try {
+    await NotificationService().initialize();
+  } catch (_) {
+    // Notifications not available on this platform
+  }
+
   runApp(const PedigreeManagerApp());
 }
 
@@ -37,16 +47,18 @@ class PedigreeManagerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => AnimalProvider()..loadAll(),
-      child: MaterialApp(
-        title: 'Pedigree Manager',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        // Web: start on the public landing page
-        // Mobile: start on the login screen
-        initialRoute: kIsWeb ? '/' : '/login',
-        onGenerateRoute: _generateRoute,
+      child: Consumer<AnimalProvider>(
+        builder: (context, provider, _) => MaterialApp(
+          title: 'Pedigree Manager',
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: provider.themeMode,
+          // Web: start on the public landing page
+          // Mobile: start on the login screen
+          initialRoute: kIsWeb ? '/' : '/login',
+          onGenerateRoute: _generateRoute,
+        ),
       ),
     );
   }
@@ -156,6 +168,10 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/export':
         return MaterialPageRoute(
           builder: (_) => const ExportScreen(),
+        );
+      case '/settings':
+        return MaterialPageRoute(
+          builder: (_) => const SettingsScreen(),
         );
       default:
         return MaterialPageRoute(

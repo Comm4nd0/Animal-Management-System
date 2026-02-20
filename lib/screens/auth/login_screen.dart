@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../services/api_service.dart';
+import '../../services/animal_provider.dart';
 import '../../utils/app_theme.dart';
 
 /// Login screen shared between web and mobile.
@@ -205,20 +208,47 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  void _login() {
+  void _login() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
-    // In production, call ApiService to authenticate.
-    // For now, simulate a short delay then navigate to dashboard.
-    Future.delayed(const Duration(milliseconds: 500), () {
+    try {
+      final api = ApiService();
+      final result = await api.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+
       if (!mounted) return;
-      setState(() => _isLoading = false);
+
+      final provider = context.read<AnimalProvider>();
+      provider.setAuthToken(result['token'] as String);
+
+      // Load data after login
+      await provider.loadAll();
+
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/dashboard');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Logged in successfully')),
       );
-    });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.statusCode == 401
+            ? 'Invalid email or password'
+            : 'Login failed: ${e.message}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      // If API is unreachable, allow offline login
+      Navigator.pushReplacementNamed(context, '/dashboard');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Logged in (offline mode)')),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 }

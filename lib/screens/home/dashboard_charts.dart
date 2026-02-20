@@ -797,6 +797,172 @@ class StatusDistributionChart extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// 7. Health Reminders – Upcoming & overdue health records
+// ═══════════════════════════════════════════════════════════════════
+
+class HealthRemindersCard extends StatelessWidget {
+  final List<HealthRecord> upcoming;
+  final List<HealthRecord> overdue;
+  final List<Animal> animals;
+
+  const HealthRemindersCard({
+    super.key,
+    required this.upcoming,
+    required this.overdue,
+    required this.animals,
+  });
+
+  String _animalName(String animalId) {
+    try {
+      return animals.firstWhere((a) => a.id == animalId).name;
+    } catch (_) {
+      return 'Unknown';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (upcoming.isEmpty && overdue.isEmpty) return const SizedBox.shrink();
+
+    return _ChartCard(
+      title: 'Health Reminders',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (overdue.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 18, color: AppTheme.errorColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${overdue.length} overdue',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.errorColor,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...overdue.take(3).map((r) => _ReminderTile(
+                  record: r,
+                  animalName: _animalName(r.animalId),
+                  isOverdue: true,
+                )),
+            if (overdue.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 4),
+                child: Text(
+                  '+${overdue.length - 3} more overdue',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+            if (upcoming.isNotEmpty)
+              const Divider(height: 20),
+          ],
+          if (upcoming.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.schedule, size: 18, color: AppTheme.accentColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${upcoming.length} upcoming (next 30 days)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentColor,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...upcoming.take(5).map((r) => _ReminderTile(
+                  record: r,
+                  animalName: _animalName(r.animalId),
+                  isOverdue: false,
+                )),
+            if (upcoming.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 4),
+                child: Text(
+                  '+${upcoming.length - 5} more upcoming',
+                  style: TextStyle(
+                      fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ReminderTile extends StatelessWidget {
+  final HealthRecord record;
+  final String animalName;
+  final bool isOverdue;
+
+  const _ReminderTile({
+    required this.record,
+    required this.animalName,
+    required this.isOverdue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isOverdue ? AppTheme.errorColor : AppTheme.accentColor;
+    final dueText = record.nextDueDate != null
+        ? '${record.nextDueDate!.day}/${record.nextDueDate!.month}/${record.nextDueDate!.year}'
+        : '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  record.title,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '$animalName  \u2022  Due: $dueText',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // Shared helpers
 // ═══════════════════════════════════════════════════════════════════
 

@@ -161,6 +161,61 @@ class AnimalAPITests(APITestCase):
         self.assertEqual(data['breed_distribution'][0]['label'], 'Golden Retriever')
 
 
+class WeightRecordAPITests(APITestCase):
+    def setUp(self):
+        self.animal = Animal.objects.create(
+            name='Max', species='Dog', breed='Labrador', sex=Animal.Sex.MALE,
+        )
+
+    def test_create_weight_record(self):
+        data = {'animal': str(self.animal.pk), 'date': '2025-01-15', 'weight': '25.5', 'height': '55.0'}
+        response = self.client.post('/api/v1/weight-records/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_list_weight_records(self):
+        response = self.client.get('/api/v1/weight-records/', {'animal': str(self.animal.pk)})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class ShowResultAPITests(APITestCase):
+    def setUp(self):
+        self.animal = Animal.objects.create(
+            name='Star', species='Horse', breed='Thoroughbred', sex=Animal.Sex.FEMALE,
+        )
+
+    def test_create_show_result(self):
+        data = {
+            'animal': str(self.animal.pk), 'show_name': 'County Fair 2025',
+            'show_date': '2025-06-01', 'placement': 1,
+        }
+        response = self.client.post('/api/v1/show-results/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_list_show_results(self):
+        response = self.client.get('/api/v1/show-results/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class FinancialRecordAPITests(APITestCase):
+    def setUp(self):
+        self.animal = Animal.objects.create(
+            name='Bella', species='Dog', breed='Poodle', sex=Animal.Sex.FEMALE,
+        )
+
+    def test_create_financial_record(self):
+        data = {
+            'animal': str(self.animal.pk), 'date': '2025-03-01',
+            'transaction_type': 0, 'category': 1, 'amount': '150.00',
+            'description': 'Annual checkup',
+        }
+        response = self.client.post('/api/v1/financial-records/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    def test_list_financial_records(self):
+        response = self.client.get('/api/v1/financial-records/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
 class GeneticsAPITests(APITestCase):
     def setUp(self):
         self.grandsire = Animal.objects.create(

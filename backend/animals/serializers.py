@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact
+from .models import Animal, AnimalImage, HealthRecord, BreedingRecord, Litter, CustomFieldDefinition, Contact, WeightRecord, ShowResult, FinancialRecord, DocumentAttachment
 
 
 class ContactSerializer(serializers.ModelSerializer):
@@ -187,3 +187,43 @@ class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
             'required', 'options', 'display_order', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'field_key', 'created_at', 'updated_at']
+
+
+class WeightRecordSerializer(serializers.ModelSerializer):
+    animal_name = serializers.CharField(source='animal.name', read_only=True)
+
+    class Meta:
+        model = WeightRecord
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+
+class ShowResultSerializer(serializers.ModelSerializer):
+    animal_name = serializers.CharField(source='animal.name', read_only=True)
+    placement_display = serializers.CharField(source='get_placement_display', read_only=True)
+
+    class Meta:
+        model = ShowResult
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+
+class FinancialRecordSerializer(serializers.ModelSerializer):
+    animal_name = serializers.CharField(source='animal.name', read_only=True)
+    transaction_type_display = serializers.CharField(source='get_transaction_type_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+
+    class Meta:
+        model = FinancialRecord
+        fields = '__all__'
+        read_only_fields = ['created_at']
+
+
+class DocumentAttachmentSerializer(serializers.ModelSerializer):
+    animal_name = serializers.CharField(source='animal.name', read_only=True)
+    document_type_display = serializers.CharField(source='get_document_type_display', read_only=True)
+
+    class Meta:
+        model = DocumentAttachment
+        fields = '__all__'
+        read_only_fields = ['uploaded_at']
