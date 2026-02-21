@@ -874,4 +874,133 @@ class AnimalProvider extends ChangeNotifier {
       _selectedSpeciesFilter != null ||
       _selectedBreedFilter != null ||
       _customFieldFilters.isNotEmpty;
+
+  // ─── Paginated Data Table (server-side) ───────────────────────
+
+  List<Animal> _tableAnimals = [];
+  int _tableTotalCount = 0;
+  int _tablePage = 1;
+  int _tablePageSize = 25;
+  String _tableSortColumn = 'name';
+  bool _tableSortAscending = true;
+  String _tableSearch = '';
+  String? _tableSpeciesFilter;
+  String? _tableBreedFilter;
+  int? _tableSexFilter;
+  int? _tableStatusFilter;
+  bool _tableLoading = false;
+  String? _tableError;
+
+  List<Animal> get tableAnimals => _tableAnimals;
+  int get tableTotalCount => _tableTotalCount;
+  int get tablePage => _tablePage;
+  int get tablePageSize => _tablePageSize;
+  String get tableSortColumn => _tableSortColumn;
+  bool get tableSortAscending => _tableSortAscending;
+  String get tableSearch => _tableSearch;
+  String? get tableSpeciesFilter => _tableSpeciesFilter;
+  String? get tableBreedFilter => _tableBreedFilter;
+  int? get tableSexFilter => _tableSexFilter;
+  int? get tableStatusFilter => _tableStatusFilter;
+  bool get tableLoading => _tableLoading;
+  String? get tableError => _tableError;
+  int get tableTotalPages => (_tableTotalCount / _tablePageSize).ceil().clamp(1, 999999);
+
+  /// Fetches a page of animals from the API with the current sort/filter state.
+  /// Runs in the background so the UI stays responsive.
+  Future<void> fetchTablePage() async {
+    _tableLoading = true;
+    _tableError = null;
+    notifyListeners();
+
+    try {
+      final ordering = _tableSortAscending
+          ? _tableSortColumn
+          : '-$_tableSortColumn';
+
+      final result = await ApiService().getAnimalsPaginated(
+        page: _tablePage,
+        pageSize: _tablePageSize,
+        ordering: ordering,
+        search: _tableSearch.isNotEmpty ? _tableSearch : null,
+        species: _tableSpeciesFilter,
+        breed: _tableBreedFilter,
+        sex: _tableSexFilter,
+        status: _tableStatusFilter,
+      );
+
+      _tableAnimals = result.animals;
+      _tableTotalCount = result.totalCount;
+    } catch (e) {
+      _tableError = e.toString();
+    } finally {
+      _tableLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void setTableSort(String column, bool ascending) {
+    _tableSortColumn = column;
+    _tableSortAscending = ascending;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void setTablePage(int page) {
+    _tablePage = page.clamp(1, tableTotalPages);
+    fetchTablePage();
+  }
+
+  void setTablePageSize(int size) {
+    _tablePageSize = size;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void setTableSearch(String query) {
+    _tableSearch = query;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void setTableSpeciesFilter(String? species) {
+    _tableSpeciesFilter = species;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void setTableBreedFilter(String? breed) {
+    _tableBreedFilter = breed;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void setTableSexFilter(int? sex) {
+    _tableSexFilter = sex;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void setTableStatusFilter(int? status) {
+    _tableStatusFilter = status;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  void clearTableFilters() {
+    _tableSearch = '';
+    _tableSpeciesFilter = null;
+    _tableBreedFilter = null;
+    _tableSexFilter = null;
+    _tableStatusFilter = null;
+    _tablePage = 1;
+    fetchTablePage();
+  }
+
+  bool get hasActiveTableFilters =>
+      _tableSearch.isNotEmpty ||
+      _tableSpeciesFilter != null ||
+      _tableBreedFilter != null ||
+      _tableSexFilter != null ||
+      _tableStatusFilter != null;
 }
