@@ -514,8 +514,7 @@ class _MatchCard extends StatelessWidget {
                     OutlinedButton.icon(
                       onPressed: () => Navigator.pushNamed(
                         context,
-                        '/animal/detail',
-                        arguments: dam.id,
+                        '/animals/${dam.id}',
                       ),
                       icon: const Icon(Icons.visibility, size: 16),
                       label: const Text('View Female'),

@@ -283,7 +283,7 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
     return GestureDetector(
       onTap: () {
         if (animal.id != widget.animalId) {
-          Navigator.pushNamed(context, '/animal/detail', arguments: animal.id);
+          Navigator.pushNamed(context, '/animals/${animal.id}');
         }
       },
       child: Container(

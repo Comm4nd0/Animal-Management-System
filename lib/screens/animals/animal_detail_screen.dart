@@ -74,8 +74,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                   if (!await guardWriteAction(context)) return;
                   Navigator.pushNamed(
                     context,
-                    '/animal/edit',
-                    arguments: animal.id,
+                    '/animals/${animal.id}/edit',
                   );
                 },
               ),
@@ -306,8 +305,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             ElevatedButton.icon(
               onPressed: () => Navigator.pushNamed(
                 context,
-                '/health',
-                arguments: widget.animalId,
+                '/health/${widget.animalId}',
               ),
               icon: const Icon(Icons.add),
               label: const Text('Add Record'),
@@ -324,8 +322,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
           child: ElevatedButton.icon(
             onPressed: () => Navigator.pushNamed(
               context,
-              '/health',
-              arguments: widget.animalId,
+              '/health/${widget.animalId}',
             ),
             icon: const Icon(Icons.medical_services),
             label: const Text('Manage Health Records'),
@@ -402,7 +399,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
         const SizedBox(height: 12),
         ElevatedButton.icon(
           onPressed: () =>
-              Navigator.pushNamed(context, '/pedigree', arguments: animal.id),
+              Navigator.pushNamed(context, '/pedigree/${animal.id}'),
           icon: const Icon(Icons.account_tree),
           label: const Text('View Full Pedigree Tree'),
         ),
@@ -410,8 +407,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
         ElevatedButton.icon(
           onPressed: () => Navigator.pushNamed(
             context,
-            '/breeding/suggestions',
-            arguments: animal.id,
+            '/breeding/${animal.id}',
           ),
           icon: const Icon(Icons.favorite),
           label: const Text('Get Breeding Suggestions'),
@@ -435,8 +431,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
               ? InkWell(
                   onTap: () => Navigator.pushNamed(
                     context,
-                    '/animal/detail',
-                    arguments: parent.id,
+                    '/animals/${parent.id}',
                   ),
                   child: Text(
                     '${parent.name} (${parent.breed})',
@@ -731,15 +726,13 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
   Future<void> _handleMenuAction(String action, Animal animal) async {
     switch (action) {
       case 'pedigree':
-        Navigator.pushNamed(context, '/pedigree', arguments: animal.id);
+        Navigator.pushNamed(context, '/pedigree/${animal.id}');
         break;
       case 'breeding':
-        Navigator.pushNamed(context, '/breeding/suggestions',
-            arguments: animal.id);
+        Navigator.pushNamed(context, '/breeding/${animal.id}');
         break;
       case 'stud_matcher':
-        Navigator.pushNamed(context, '/stud-matcher/preselected',
-            arguments: animal.id);
+        Navigator.pushNamed(context, '/stud-matcher/${animal.id}');
         break;
       case 'delete':
         if (!await guardWriteAction(context)) return;
