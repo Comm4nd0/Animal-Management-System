@@ -112,6 +112,10 @@ class _LandingScreenState extends State<LandingScreen> {
           onPressed: () => _scrollToSection(context, 'pricing'),
           child: const Text('Pricing', style: TextStyle(color: Colors.white70)),
         ),
+        TextButton(
+          onPressed: () => Navigator.pushNamed(context, '/support'),
+          child: const Text('Support', style: TextStyle(color: Colors.white70)),
+        ),
         const SizedBox(width: 8),
         TextButton.icon(
           onPressed: _isDemoLoading ? null : _enterDemo,
@@ -609,7 +613,7 @@ class _LandingScreenState extends State<LandingScreen> {
                     const Text('Terms', style: TextStyle(color: Colors.white38)),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () => Navigator.pushNamed(context, '/support'),
                 child:
                     const Text('Contact', style: TextStyle(color: Colors.white38)),
               ),
