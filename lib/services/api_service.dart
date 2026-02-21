@@ -178,10 +178,36 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
-  /// Log in as the demo user (read-only, no credentials needed).
-  /// Returns {token, user, is_demo: true} or throws.
-  Future<Map<String, dynamic>> demoLogin() async {
-    final data = await _post('/accounts/demo-login/', {});
+  // ─── Password Reset ─────────────────────────────────────────
+
+  Future<Map<String, dynamic>> requestPasswordReset(String email) async {
+    final data = await _post('/accounts/request-password-reset/', {
+      'email': email,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> confirmPasswordReset(
+    String email,
+    String code,
+    String newPassword,
+  ) async {
+    final data = await _post('/accounts/confirm-password-reset/', {
+      'email': email,
+      'code': code,
+      'new_password': newPassword,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    final data = await _post('/accounts/change-password/', {
+      'current_password': currentPassword,
+      'new_password': newPassword,
+    });
     return Map<String, dynamic>.from(data);
   }
 
@@ -306,6 +332,81 @@ class ApiService {
 
   Future<void> deleteCustomFieldDefinition(String id) async {
     await _delete('/custom-fields/$id/');
+  }
+
+  // ─── Support Messaging ─────────────────────────────────────────
+
+  /// List all support tickets for the authenticated user.
+  Future<List<SupportTicket>> getSupportTickets() async {
+    final data = await _get('/support/');
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results
+        .map((m) => SupportTicket.fromListApi(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Get a specific support ticket with all messages (authenticated).
+  Future<SupportTicket> getSupportTicket(String id) async {
+    final data = await _get('/support/$id/');
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Create a new support ticket.
+  /// For guests: name, email, and phone are required.
+  /// For authenticated users: those fields are optional.
+  Future<SupportTicket> createSupportTicket({
+    required String subject,
+    required String message,
+    String guestName = '',
+    String guestEmail = '',
+    String guestPhone = '',
+  }) async {
+    final data = await _post('/support/create/', {
+      'subject': subject,
+      'message': message,
+      'guest_name': guestName,
+      'guest_email': guestEmail,
+      'guest_phone': guestPhone,
+    });
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Reply to a support ticket (authenticated user).
+  Future<SupportTicket> replySupportTicket(String ticketId, String message) async {
+    final data = await _post('/support/$ticketId/reply/', {
+      'message': message,
+    });
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Mark all staff replies as read for a ticket.
+  Future<void> markSupportTicketRead(String ticketId) async {
+    await _post('/support/$ticketId/mark-read/', {});
+  }
+
+  /// Close a support ticket.
+  Future<void> closeSupportTicket(String ticketId) async {
+    await _post('/support/$ticketId/close/', {});
+  }
+
+  /// Get unread support message count.
+  Future<int> getSupportUnreadCount() async {
+    final data = await _get('/support/unread-count/');
+    return data['unread_count'] as int? ?? 0;
+  }
+
+  /// Get a guest ticket by its UUID.
+  Future<SupportTicket> getGuestSupportTicket(String ticketId) async {
+    final data = await _get('/support/guest/$ticketId/');
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Reply to a guest ticket.
+  Future<SupportTicket> replyGuestSupportTicket(String ticketId, String message) async {
+    final data = await _post('/support/guest/$ticketId/reply/', {
+      'message': message,
+    });
+    return SupportTicket.fromDetailApi(data);
   }
 
   // ─── Serialization Helpers ────────────────────────────────────

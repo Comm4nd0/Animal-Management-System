@@ -5,7 +5,9 @@ import 'models/models.dart';
 import 'services/animal_provider.dart';
 import 'utils/app_theme.dart';
 import 'screens/auth/landing_screen.dart';
+import 'screens/auth/forgot_password_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/animals/animal_list_screen.dart';
 import 'screens/animals/animal_detail_screen.dart';
@@ -25,6 +27,7 @@ import 'screens/import_export/import_screen.dart';
 import 'screens/import_export/export_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/support/support_screen.dart';
 import 'services/notification_service.dart';
 
 void main() async {
@@ -79,6 +82,15 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/register':
         return MaterialPageRoute(
           builder: (_) => const RegistrationScreen(),
+        );
+      case '/forgot-password':
+        return MaterialPageRoute(
+          builder: (_) => const ForgotPasswordScreen(),
+        );
+      case '/reset-password':
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => const ResetPasswordScreen(),
         );
 
       // ─── Authenticated routes (dashboard) ─────────────────────
@@ -172,6 +184,10 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/settings':
         return MaterialPageRoute(
           builder: (_) => const SettingsScreen(),
+        );
+      case '/support':
+        return MaterialPageRoute(
+          builder: (_) => const SupportScreen(),
         );
       default:
         return MaterialPageRoute(

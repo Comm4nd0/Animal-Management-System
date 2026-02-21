@@ -17,6 +17,7 @@ from animals.views import (
     DocumentAttachmentViewSet,
 )
 from genetics.views import GeneticsViewSet
+from support.views import SupportViewSet
 from .views import frontend
 
 router = DefaultRouter()
@@ -32,6 +33,7 @@ router.register(r'show-results', ShowResultViewSet, basename='show-result')
 router.register(r'financial-records', FinancialRecordViewSet, basename='financial-record')
 router.register(r'documents', DocumentAttachmentViewSet, basename='document')
 router.register(r'genetics', GeneticsViewSet, basename='genetics')
+router.register(r'support', SupportViewSet, basename='support')
 
 urlpatterns = [
     path('admin/', admin.site.urls),

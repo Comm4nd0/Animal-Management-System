@@ -59,6 +59,36 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.pushNamed(context, '/animals'),
           ),
+          // Support messaging — with unread badge
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.support_agent),
+                tooltip: 'Support',
+                onPressed: () => Navigator.pushNamed(context, '/support'),
+              ),
+              if (provider.supportUnreadCount > 0)
+                Positioned(
+                  right: 6,
+                  top: 6,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '${provider.supportUnreadCount}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           if (!isDemo)
             IconButton(
               icon: const Icon(Icons.settings),
@@ -415,7 +445,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            const Expanded(child: SizedBox()),
+            Expanded(
+              child: _ActionCard(
+                icon: Icons.support_agent,
+                label: 'Support',
+                onTap: () => Navigator.pushNamed(context, '/support'),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),

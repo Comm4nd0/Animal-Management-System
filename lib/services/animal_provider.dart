@@ -9,6 +9,7 @@ import 'database_service.dart';
 import 'genetics_service.dart';
 import 'notification_service.dart';
 import 'pedigree_validator.dart';
+import 'api_service.dart';
 import 'sync_service.dart';
 
 /// Central state management provider for all animal-related data.
@@ -744,6 +745,94 @@ class AnimalProvider extends ChangeNotifier {
     await _db.deleteDocumentAttachment(id);
     _documentAttachments = await _db.getDocumentAttachments(animalId);
     notifyListeners();
+  }
+
+  // ─── Support Messaging ──────────────────────────────────────
+
+  final ApiService _api = ApiService();
+  List<SupportTicket> _supportTickets = [];
+  int _supportUnreadCount = 0;
+
+  List<SupportTicket> get supportTickets => _supportTickets;
+  int get supportUnreadCount => _supportUnreadCount;
+
+  Future<void> loadSupportTickets() async {
+    if (!isLoggedIn) return;
+    try {
+      _supportTickets = await _api.getSupportTickets();
+      notifyListeners();
+    } catch (_) {
+      // Silently fail — support is non-critical
+    }
+  }
+
+  Future<SupportTicket> loadSupportTicketDetail(String ticketId) async {
+    return await _api.getSupportTicket(ticketId);
+  }
+
+  Future<SupportTicket> createSupportTicket({
+    required String subject,
+    required String message,
+    String guestName = '',
+    String guestEmail = '',
+    String guestPhone = '',
+  }) async {
+    final ticket = await _api.createSupportTicket(
+      subject: subject,
+      message: message,
+      guestName: guestName,
+      guestEmail: guestEmail,
+      guestPhone: guestPhone,
+    );
+    if (isLoggedIn) {
+      await loadSupportTickets();
+    }
+    return ticket;
+  }
+
+  Future<SupportTicket> replySupportTicket(String ticketId, String message) async {
+    final ticket = await _api.replySupportTicket(ticketId, message);
+    await loadSupportTickets();
+    return ticket;
+  }
+
+  Future<void> markSupportTicketRead(String ticketId) async {
+    await _api.markSupportTicketRead(ticketId);
+    await loadSupportUnreadCount();
+  }
+
+  Future<void> closeSupportTicket(String ticketId) async {
+    await _api.closeSupportTicket(ticketId);
+    await loadSupportTickets();
+  }
+
+  Future<void> loadSupportUnreadCount() async {
+    if (!isLoggedIn) {
+      _supportUnreadCount = 0;
+      return;
+    }
+    try {
+      final previousCount = _supportUnreadCount;
+      _supportUnreadCount = await _api.getSupportUnreadCount();
+      notifyListeners();
+
+      // Trigger a push notification when new unread messages arrive
+      if (_supportUnreadCount > previousCount && _supportUnreadCount > 0) {
+        NotificationService().notifySupportUnread(_supportUnreadCount);
+      }
+    } catch (_) {
+      _supportUnreadCount = 0;
+    }
+  }
+
+  // Guest support helpers (ticket ID stored locally by the UI)
+
+  Future<SupportTicket> loadGuestSupportTicket(String ticketId) async {
+    return await _api.getGuestSupportTicket(ticketId);
+  }
+
+  Future<SupportTicket> replyGuestSupportTicket(String ticketId, String message) async {
+    return await _api.replyGuestSupportTicket(ticketId, message);
   }
 
   // ─── Filters ──────────────────────────────────────────────────

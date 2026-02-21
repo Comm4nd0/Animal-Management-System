@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/constants.dart';
+import '../../utils/password_validator.dart';
 
 class RegistrationScreen extends StatefulWidget {
   const RegistrationScreen({super.key});
@@ -85,11 +86,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 prefixIcon: Icon(Icons.lock),
               ),
               obscureText: true,
-              validator: (v) {
-                if (v == null || v.isEmpty) return 'Password is required';
-                if (v.length < 8) return 'Minimum 8 characters';
-                return null;
-              },
+              validator: validatePasswordComplexity,
             ),
             const SizedBox(height: 12),
             TextFormField(
