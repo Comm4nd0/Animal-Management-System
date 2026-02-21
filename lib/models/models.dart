@@ -16,3 +16,4 @@ export 'financial_record.dart';
 export 'document_attachment.dart';
 export 'dashboard_stats.dart';
 export 'background_task.dart';
+export 'support_ticket.dart';
