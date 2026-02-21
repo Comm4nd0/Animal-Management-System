@@ -44,12 +44,19 @@ class DemoService {
         provider.setUserProfile(UserProfile.fromApi(profileData));
       }
 
-      // Sync data from the demo account
-      final syncService = SyncService(api: _api, db: _db);
-      await syncService.syncAll();
-
       provider.setDemoMode(true);
-      await provider.loadAll();
+
+      if (kIsWeb) {
+        // On web, sqflite is not available.
+        // Load data directly from the API into memory.
+        await provider.loadAllFromApi();
+      } else {
+        // On mobile, sync data into local SQLite then load from there.
+        final syncService = SyncService(api: _api, db: _db);
+        await syncService.syncAll();
+        await provider.loadAll();
+      }
+
       return true;
     } catch (e, st) {
       debugPrint('Demo API login failed: $e');
@@ -89,19 +96,23 @@ class DemoService {
     _api.authToken = null;
     provider.setAuthToken(null);
 
-    // Clear all local data
-    try {
-      await _clearLocalData();
-    } catch (e) {
-      debugPrint('Clear local data failed (expected on web): $e');
+    // Clear all local data (skip on web where sqflite is unavailable)
+    if (!kIsWeb) {
+      try {
+        await _clearLocalData();
+      } catch (e) {
+        debugPrint('Clear local data failed: $e');
+      }
     }
 
     // Reset demo flag and user profile
     provider.setUserProfile(null);
     provider.setDemoMode(false);
 
-    // Reload (will be empty)
-    await provider.loadAll();
+    // Reload (will be empty) — skip on web since sqflite is unavailable
+    if (!kIsWeb) {
+      await provider.loadAll();
+    }
   }
 
   Future<void> _clearLocalData() async {

@@ -75,6 +75,8 @@ class AnimalViewSet(viewsets.ModelViewSet):
         profile = _get_user_profile(self.request)
         if profile is not None:
             qs = qs.filter(account=profile)
+        else:
+            return qs.none()
 
         # Apply custom field filters (params prefixed with 'cf_')
         for param, value in self.request.query_params.items():
@@ -808,6 +810,8 @@ class CustomFieldDefinitionViewSet(viewsets.ModelViewSet):
         profile = _get_user_profile(self.request)
         if profile is not None:
             qs = qs.filter(owner=profile)
+        else:
+            return qs.none()
         return qs
 
     def perform_create(self, serializer):
@@ -841,6 +845,8 @@ class ContactViewSet(viewsets.ModelViewSet):
         profile = _get_user_profile(self.request)
         if profile is not None:
             qs = qs.filter(account=profile)
+        else:
+            return qs.none()
         return qs
 
     def perform_create(self, serializer):

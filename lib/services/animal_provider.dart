@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/models.dart';
+import 'api_service.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
 import 'notification_service.dart';
@@ -230,6 +231,50 @@ class AnimalProvider extends ChangeNotifier {
       } catch (_) {
         // Notifications not available on this platform
       }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Loads all data directly from the API into memory, bypassing SQLite.
+  /// Used for web demo mode where sqflite is not available.
+  Future<void> loadAllFromApi() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final api = ApiService();
+
+      // Load the first page of each resource for a fast demo entry.
+      // This gives the user a representative sample of data instantly.
+      _animals = await api.getAnimals();
+      _contacts = await api.getContacts();
+
+      try {
+        _breedingRecords = await api.getActiveBreedings();
+      } catch (_) {
+        _breedingRecords = [];
+      }
+
+      try {
+        _litters = await api.getLitters();
+      } catch (_) {
+        _litters = [];
+      }
+
+      try {
+        _customFieldDefinitions = await api.getCustomFieldDefinitions();
+      } catch (_) {
+        _customFieldDefinitions = [];
+      }
+
+      // Build stats from the loaded animals
+      final statsMap = <String, int>{};
+      for (final animal in _animals) {
+        statsMap[animal.species] = (statsMap[animal.species] ?? 0) + 1;
+      }
+      _stats = statsMap;
     } finally {
       _isLoading = false;
       notifyListeners();

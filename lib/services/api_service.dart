@@ -91,6 +91,32 @@ class ApiService {
     return results.map((m) => _animalFromApi(m)).toList();
   }
 
+  /// Fetch ALL animals across all pages of paginated results.
+  Future<List<Animal>> getAllAnimals() async {
+    final all = <Animal>[];
+    String? nextUrl = '$baseUrl/animals/?page_size=5000';
+
+    while (nextUrl != null) {
+      final uri = Uri.parse(nextUrl);
+      final response = await http.get(uri, headers: _headers);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(response.statusCode, response.body);
+      }
+      final data = jsonDecode(response.body);
+      if (data is Map) {
+        final results = data['results'] as List? ?? [];
+        all.addAll(results.map((m) => _animalFromApi(m)));
+        nextUrl = data['next'] as String?;
+      } else if (data is List) {
+        all.addAll((data).map((m) => _animalFromApi(m)));
+        nextUrl = null;
+      } else {
+        nextUrl = null;
+      }
+    }
+    return all;
+  }
+
   Future<Animal> getAnimal(String id) async {
     final data = await _get('/animals/$id/');
     return _animalFromApi(data);
