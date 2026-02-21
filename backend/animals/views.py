@@ -207,14 +207,18 @@ class AnimalViewSet(viewsets.ModelViewSet):
         qs = self.get_queryset()
 
         # ── Registration timeline (animals created per month) ─────
+        from django.db.models.functions import TruncMonth
         timeline_qs = (
-            qs.extra(select={'month': "strftime('%%Y-%%m', created_at)"})
+            qs.annotate(month=TruncMonth('created_at'))
             .values('month')
             .annotate(count=db_models.Count('id'))
             .order_by('month')
         )
         registration_timeline = [
-            {'month': row['month'], 'count': row['count']}
+            {
+                'month': row['month'].strftime('%Y-%m') if row['month'] else None,
+                'count': row['count'],
+            }
             for row in timeline_qs
         ]
 
@@ -329,7 +333,84 @@ class AnimalViewSet(viewsets.ModelViewSet):
             for row in health_counts
         ]
 
+        # ── Counts (so the dashboard can show totals without loading all animals)
+        males = qs.filter(sex=Animal.Sex.MALE).count()
+        females = qs.filter(sex=Animal.Sex.FEMALE).count()
+        breeds = qs.values('breed').distinct().count()
+        species = qs.values('species').distinct().count()
+        alive = qs.filter(status=Animal.Status.ALIVE).count()
+        stats = {
+            'total': total,
+            'males': males,
+            'females': females,
+            'breeds': breeds,
+            'species': species,
+            'alive': alive,
+        }
+
+        # ── Recent animals (lightweight, most recently created, limit 5)
+        recent_qs = qs.order_by('-created_at')[:5]
+        recent_animals = AnimalListSerializer(
+            recent_qs, many=True, context={'request': request},
+        ).data
+
+        # ── Health reminders (upcoming + overdue) ────────────────
+        from datetime import timedelta
+        upcoming_date = today + timedelta(days=30)
+        animal_ids = qs.values_list('pk', flat=True)
+
+        overdue_records = HealthRecord.objects.filter(
+            animal_id__in=animal_ids,
+            next_due_date__lt=today,
+        ).select_related('animal').order_by('next_due_date')[:10]
+
+        upcoming_records = HealthRecord.objects.filter(
+            animal_id__in=animal_ids,
+            next_due_date__gte=today,
+            next_due_date__lte=upcoming_date,
+        ).select_related('animal').order_by('next_due_date')[:10]
+
+        health_reminders = {
+            'overdue': [
+                {
+                    'id': str(r.pk),
+                    'title': r.title,
+                    'animal_id': str(r.animal_id),
+                    'animal_name': r.animal.name,
+                    'next_due_date': str(r.next_due_date),
+                    'type': r.type,
+                }
+                for r in overdue_records
+            ],
+            'upcoming': [
+                {
+                    'id': str(r.pk),
+                    'title': r.title,
+                    'animal_id': str(r.animal_id),
+                    'animal_name': r.animal.name,
+                    'next_due_date': str(r.next_due_date),
+                    'type': r.type,
+                }
+                for r in upcoming_records
+            ],
+        }
+
+        # ── Active breedings ────────────────────────────────────
+        active_statuses = [
+            BreedingRecord.Status.PLANNED,
+            BreedingRecord.Status.CONFIRMED,
+            BreedingRecord.Status.PREGNANT,
+            BreedingRecord.Status.WHELPING,
+        ]
+        active_breedings_qs = BreedingRecord.objects.filter(
+            status__in=active_statuses,
+        ).select_related('sire', 'dam')[:5]
+        active_breedings = BreedingRecordSerializer(
+            active_breedings_qs, many=True,
+        ).data
+
         return Response({
+            'stats': stats,
             'registration_timeline': registration_timeline,
             'sex_distribution': sex_distribution,
             'status_distribution': status_distribution,
@@ -337,6 +418,9 @@ class AnimalViewSet(viewsets.ModelViewSet):
             'age_distribution': age_distribution,
             'genetic_diversity': genetic_diversity,
             'health_summary': health_summary,
+            'recent_animals': recent_animals,
+            'health_reminders': health_reminders,
+            'active_breedings': active_breedings,
         })
 
     @action(detail=False, methods=['get'])

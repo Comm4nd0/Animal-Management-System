@@ -14,3 +14,5 @@ export 'weight_record.dart';
 export 'show_result.dart';
 export 'financial_record.dart';
 export 'document_attachment.dart';
+export 'dashboard_stats.dart';
+export 'background_task.dart';

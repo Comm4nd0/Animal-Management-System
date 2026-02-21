@@ -453,6 +453,34 @@ class ApiService {
       'notes': l.notes ?? '',
     };
   }
+
+  // ─── Background Tasks ─────────────────────────────────────
+
+  Future<Map<String, dynamic>> createPedigreeTask(String animalId, {int generations = 5}) async {
+    final data = await _post('/tasks/pedigree/', {
+      'animal_id': animalId,
+      'generations': generations,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> createBreedingSuggestionsTask(
+    String animalId, {
+    int maxResults = 10,
+    double maxCoi = 12.5,
+  }) async {
+    final data = await _post('/tasks/breeding-suggestions/', {
+      'animal_id': animalId,
+      'max_results': maxResults,
+      'max_coi': maxCoi,
+    });
+    return Map<String, dynamic>.from(data);
+  }
+
+  Future<Map<String, dynamic>> getTaskStatus(String taskId) async {
+    final data = await _get('/tasks/$taskId/');
+    return Map<String, dynamic>.from(data);
+  }
 }
 
 class ApiException implements Exception {

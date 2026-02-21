@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'accounts',
     'animals',
     'genetics',
+    'tasks',
 ]
 
 MIDDLEWARE = [
@@ -176,6 +177,16 @@ if config('USE_S3', default=False, cast=bool):
         'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
     }
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+
+# Celery / Redis configuration
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300  # 5 minute hard limit
+CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minute soft limit
 
 # Logging
 LOGGING = {

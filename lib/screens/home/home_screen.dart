@@ -96,8 +96,13 @@ class _HomeScreenState extends State<HomeScreen> {
           if (provider.isLoading) {
             return const Center(child: CircularProgressIndicator());
           }
+          final hasDashboardStats = provider.dashboardStats != null;
+          final hasData = hasDashboardStats
+              ? !provider.dashboardStats!.isEmpty
+              : provider.allAnimals.isNotEmpty;
+
           return RefreshIndicator(
-            onRefresh: provider.loadAll,
+            onRefresh: provider.isDemoMode ? provider.loadAllFromApi : provider.loadAll,
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -109,8 +114,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 16),
                 _buildStatsRow(context, provider.stats),
                 const SizedBox(height: 16),
-                if (provider.allAnimals.isNotEmpty) ...[
-                  _buildChartsSection(context, provider),
+                if (hasData) ...[
+                  if (hasDashboardStats)
+                    _buildAggregatedChartsSection(context, provider.dashboardStats!)
+                  else
+                    _buildChartsSection(context, provider),
                   const SizedBox(height: 16),
                 ],
                 _buildQuickActions(context),
@@ -283,6 +291,41 @@ class _HomeScreenState extends State<HomeScreen> {
         GeneticDiversityCard(animals: animals),
         const SizedBox(height: 12),
         _HealthRemindersSection(provider: provider),
+      ],
+    );
+  }
+
+  /// Charts section using pre-aggregated data from the dashboard-stats API.
+  /// No need to load all animals into memory.
+  Widget _buildAggregatedChartsSection(BuildContext context, DashboardStats ds) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Insights',
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 8),
+        AggregatedTimelineChart(data: ds.registrationTimeline),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: AggregatedPieChart(title: 'Sex Distribution', data: ds.sexDistribution)),
+            const SizedBox(width: 12),
+            Expanded(child: AggregatedPieChart(title: 'Status Breakdown', data: ds.statusDistribution)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        AggregatedBarChart(title: 'Breed Distribution', data: ds.breedDistribution),
+        const SizedBox(height: 12),
+        AggregatedBarChart(title: 'Age Distribution', data: ds.ageDistribution),
+        const SizedBox(height: 12),
+        AggregatedGeneticDiversityCard(stats: ds.geneticDiversity),
+        const SizedBox(height: 12),
+        AggregatedHealthRemindersCard(reminders: ds.healthReminders),
       ],
     );
   }

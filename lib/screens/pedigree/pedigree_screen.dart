@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:printing/printing.dart';
 import '../../services/animal_provider.dart';
+import '../../services/background_task_service.dart';
 import '../../services/pedigree_pdf_service.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
@@ -19,6 +21,8 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
   PedigreeNode? _pedigreeTree;
   bool _isLoading = true;
   int _generations = 4;
+  int _taskProgress = 0;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -27,13 +31,98 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
   }
 
   Future<void> _loadPedigree() async {
-    setState(() => _isLoading = true);
-    final provider = context.read<AnimalProvider>();
-    final tree = await provider.buildPedigreeTree(widget.animalId);
     setState(() {
-      _pedigreeTree = tree;
-      _isLoading = false;
+      _isLoading = true;
+      _errorMessage = null;
+      _taskProgress = 0;
     });
+
+    final provider = context.read<AnimalProvider>();
+
+    if (kIsWeb || provider.isDemoMode) {
+      // Use background task via API (Celery) to avoid blocking
+      await _loadPedigreeViaBackgroundTask();
+    } else {
+      // Mobile with local SQLite – use direct computation
+      final tree = await provider.buildPedigreeTree(widget.animalId);
+      if (mounted) {
+        setState(() {
+          _pedigreeTree = tree;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadPedigreeViaBackgroundTask() async {
+    final taskService = BackgroundTaskService();
+    final result = await taskService.computePedigreeTree(
+      widget.animalId,
+      generations: _generations,
+      onProgress: (status) {
+        if (mounted) {
+          setState(() => _taskProgress = status.progress);
+        }
+      },
+    );
+
+    if (!mounted) return;
+
+    if (result == null || result.isFailed) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = result?.error ?? 'Failed to compute pedigree tree';
+      });
+      return;
+    }
+
+    // Build PedigreeNode tree from the API result
+    if (result.result != null) {
+      final tree = _parsePedigreeResult(result.result!);
+      setState(() {
+        _pedigreeTree = tree;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'No result data returned';
+      });
+    }
+  }
+
+  PedigreeNode? _parsePedigreeResult(Map<String, dynamic> data) {
+    final animalData = data['animal'] as Map<String, dynamic>?;
+    if (animalData == null) return null;
+
+    return PedigreeNode(
+      animal: _animalFromApiData(animalData),
+      sire: data['sire'] != null
+          ? _parsePedigreeResult(Map<String, dynamic>.from(data['sire'] as Map))
+          : null,
+      dam: data['dam'] != null
+          ? _parsePedigreeResult(Map<String, dynamic>.from(data['dam'] as Map))
+          : null,
+      generation: data['generation'] as int? ?? 0,
+    );
+  }
+
+  Animal _animalFromApiData(Map<String, dynamic> m) {
+    return Animal(
+      id: m['id'] as String? ?? '',
+      name: m['name'] as String? ?? 'Unknown',
+      species: m['species'] as String? ?? '',
+      breed: m['breed'] as String? ?? '',
+      sex: Sex.values[(m['sex'] as int?) ?? 0],
+      dateOfBirth: m['date_of_birth'] != null
+          ? DateTime.tryParse(m['date_of_birth'] as String)
+          : null,
+      color: m['color'] as String?,
+      registrationNumber: m['registration_number'] as String?,
+      status: AnimalStatus.values[(m['status'] as int?) ?? 0],
+      geneticTraits: {},
+      customFields: {},
+    );
   }
 
   @override
@@ -52,6 +141,7 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
             tooltip: 'Generations',
             onSelected: (gen) {
               setState(() => _generations = gen);
+              _loadPedigree();
             },
             itemBuilder: (_) => [
               for (int i = 2; i <= 6; i++)
@@ -64,16 +154,71 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _pedigreeTree == null
-              ? const Center(child: Text('Could not load pedigree'))
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(16),
-                    child: _buildPedigreeTree(_pedigreeTree!, 0),
-                  ),
-                ),
+          ? _buildLoadingState()
+          : _errorMessage != null
+              ? _buildErrorState()
+              : _pedigreeTree == null
+                  ? const Center(child: Text('Could not load pedigree'))
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: _buildPedigreeTree(_pedigreeTree!, 0),
+                      ),
+                    ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            _taskProgress > 0
+                ? 'Building pedigree tree... $_taskProgress%'
+                : 'Building pedigree tree...',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This runs in the background and will\nupdate automatically when ready.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          Text(
+            _errorMessage ?? 'An error occurred',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _loadPedigree,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
+      ),
     );
   }
 
