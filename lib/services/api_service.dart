@@ -117,6 +117,59 @@ class ApiService {
     return all;
   }
 
+  /// Fetch a page of animals with server-side pagination, sorting, filtering,
+  /// and search. Returns a [PaginatedAnimals] containing the results and
+  /// total count so the UI can render a data table with page controls.
+  Future<PaginatedAnimals> getAnimalsPaginated({
+    int page = 1,
+    int pageSize = 25,
+    String? ordering,
+    String? search,
+    String? species,
+    String? breed,
+    int? sex,
+    int? status,
+    Map<String, String>? customFieldFilters,
+  }) async {
+    final params = <String, String>{
+      'page': '$page',
+      'page_size': '$pageSize',
+    };
+    if (ordering != null && ordering.isNotEmpty) params['ordering'] = ordering;
+    if (search != null && search.isNotEmpty) params['search'] = search;
+    if (species != null && species.isNotEmpty) params['species'] = species;
+    if (breed != null && breed.isNotEmpty) params['breed'] = breed;
+    if (sex != null) params['sex'] = '$sex';
+    if (status != null) params['status'] = '$status';
+    if (customFieldFilters != null) {
+      for (final entry in customFieldFilters.entries) {
+        params['cf_${entry.key}'] = entry.value;
+      }
+    }
+
+    final data = await _get('/animals/', queryParams: params);
+    if (data is Map) {
+      final results = (data['results'] as List? ?? [])
+          .map((m) => _animalFromApi(m as Map<String, dynamic>))
+          .toList();
+      return PaginatedAnimals(
+        animals: results,
+        totalCount: data['count'] as int? ?? results.length,
+        hasNext: data['next'] != null,
+        hasPrevious: data['previous'] != null,
+      );
+    }
+    // Non-paginated fallback
+    final results =
+        (data as List).map((m) => _animalFromApi(m as Map<String, dynamic>)).toList();
+    return PaginatedAnimals(
+      animals: results,
+      totalCount: results.length,
+      hasNext: false,
+      hasPrevious: false,
+    );
+  }
+
   Future<Animal> getAnimal(String id) async {
     final data = await _get('/animals/$id/');
     return _animalFromApi(data);
@@ -446,6 +499,9 @@ class ApiService {
       geneticTraits: Map<String, dynamic>.from(m['genetic_traits'] ?? {}),
       customFields: Map<String, dynamic>.from(m['custom_fields'] ?? {}),
       notes: m['notes'] as String?,
+      createdAt: m['created_at'] != null
+          ? DateTime.tryParse(m['created_at'] as String)
+          : null,
     );
   }
 
@@ -661,6 +717,21 @@ class ApiService {
     final data = await _post('/tasks/$taskId/retry/', {});
     return Map<String, dynamic>.from(data);
   }
+}
+
+/// Result of a paginated animals API call.
+class PaginatedAnimals {
+  final List<Animal> animals;
+  final int totalCount;
+  final bool hasNext;
+  final bool hasPrevious;
+
+  PaginatedAnimals({
+    required this.animals,
+    required this.totalCount,
+    required this.hasNext,
+    required this.hasPrevious,
+  });
 }
 
 class ApiException implements Exception {
