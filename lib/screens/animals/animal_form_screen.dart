@@ -735,14 +735,19 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     }
   }
 
-  /// Filters parent candidates to the same breed as the current animal,
-  /// excludes the animal itself, and only includes animals born before
+  /// Filters parent candidates to the same species and breed as the current
+  /// animal, excludes the animal itself, and only includes animals born before
   /// the current animal's date of birth (when set).
   List<Animal> _filterParentCandidates(List<Animal> animals) {
-    final breed = _breedController.text.trim();
+    final breed = _breedController.text.trim().toLowerCase();
+    final species = _selectedSpecies;
     return animals.where((a) {
       if (a.id == widget.animalId) return false;
-      if (breed.isNotEmpty && a.breed != breed) return false;
+      if (a.species != species) return false;
+      if (breed.isNotEmpty &&
+          a.breed.toLowerCase() != breed) {
+        return false;
+      }
       if (_dateOfBirth != null &&
           a.dateOfBirth != null &&
           !a.dateOfBirth!.isBefore(_dateOfBirth!)) {
