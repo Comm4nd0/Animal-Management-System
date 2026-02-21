@@ -59,8 +59,8 @@ class AnimalProvider extends ChangeNotifier {
   bool get isDemoMode => _isDemoMode;
 
   /// Whether the current session can create/edit/delete data.
-  /// Returns false in demo mode OR for read-only users.
-  bool get canWrite => !_isDemoMode && canWriteData;
+  /// Demo mode now allows full write access so users get the full experience.
+  bool get canWrite => canWriteData;
 
   void setDemoMode(bool value) {
     _isDemoMode = value;

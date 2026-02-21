@@ -5,8 +5,8 @@ import '../utils/app_theme.dart';
 
 /// Checks whether write operations are allowed.
 ///
-/// When the app is in demo mode (or the user is read-only), shows a friendly
-/// dialog encouraging sign-up and returns `false`. Otherwise returns `true`.
+/// When the user has a read-only role, shows a friendly dialog explaining
+/// the restriction and returns `false`. Otherwise returns `true`.
 ///
 /// Usage:
 /// ```dart
@@ -34,9 +34,9 @@ class _DemoUpgradeDialog extends StatelessWidget {
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       icon: const Icon(Icons.lock_outline, size: 40, color: AppTheme.accentColor),
-      title: const Text('Demo Mode'),
+      title: const Text('Read-Only Access'),
       content: const Text(
-        'Create your own account to add, edit, and manage your animals.',
+        'Your account has read-only access. Contact your account owner to get write permissions, or create your own account.',
         textAlign: TextAlign.center,
       ),
       actionsAlignment: MainAxisAlignment.center,

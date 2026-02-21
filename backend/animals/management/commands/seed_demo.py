@@ -5,7 +5,7 @@ Usage:
     python manage.py seed_demo          # Seed ~2,500 animals
     python manage.py seed_demo --clear  # Delete existing demo data first
 
-Creates a dedicated ``demo_user`` account (Enterprise tier, READ_ONLY role)
+Creates a dedicated ``demo_user`` account (Enterprise tier, OWNER role)
 with thousands of animals spanning multiple species, multi-generation pedigree
 trees, health records, breeding records, litters, contacts, and custom fields.
 """
@@ -229,7 +229,7 @@ class Command(BaseCommand):
             user=user,
             defaults={
                 'service_tier': ServiceTier.ENTERPRISE,
-                'role': UserRole.READ_ONLY,
+                'role': UserRole.OWNER,
                 'farm_name': 'Pedigree Manager Demo Farm',
                 'registered_species': '',
                 'registered_breed': '',
@@ -237,7 +237,7 @@ class Command(BaseCommand):
         )
         if not p_created:
             profile.service_tier = ServiceTier.ENTERPRISE
-            profile.role = UserRole.READ_ONLY
+            profile.role = UserRole.OWNER
             profile.save(update_fields=['service_tier', 'role'])
 
         self.stdout.write(f'  Demo account: {user.username} ({"created" if created else "exists"})')

@@ -90,6 +90,29 @@ class DemoService {
     }
   }
 
+  /// Reset demo data back to its known good state.
+  /// Calls the backend to clear and re-seed all demo data, then reloads.
+  Future<bool> resetDemoData(AnimalProvider provider) async {
+    try {
+      await _api.resetDemoData();
+
+      // Reload all data from the API
+      if (kIsWeb) {
+        await provider.loadAllFromApi();
+      } else {
+        final syncService = SyncService(api: _api, db: _db);
+        await syncService.syncAll();
+        await provider.loadAll();
+      }
+
+      return true;
+    } catch (e, st) {
+      debugPrint('Demo reset failed: $e');
+      debugPrint('$st');
+      return false;
+    }
+  }
+
   /// Exit demo mode: clear data and reset state.
   Future<void> exitDemoMode(AnimalProvider provider) async {
     // Clear the API token

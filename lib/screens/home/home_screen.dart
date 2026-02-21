@@ -89,12 +89,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
             ],
           ),
-          if (!isDemo)
-            IconButton(
-              icon: const Icon(Icons.settings),
-              tooltip: 'Settings',
-              onPressed: () => Navigator.pushNamed(context, '/settings'),
-            ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
           if (isDemo)
             TextButton.icon(
               onPressed: _isExitingDemo ? null : _exitDemo,
@@ -191,14 +190,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Exploring Demo',
+                    'Demo Mode',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.amber.shade900,
                     ),
                   ),
                   Text(
-                    'Browse freely — create an account to add your own animals.',
+                    'Full access enabled — add, edit, and explore freely. Reset anytime from Settings.',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.amber.shade800,
