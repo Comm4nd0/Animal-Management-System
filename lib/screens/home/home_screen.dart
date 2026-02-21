@@ -144,14 +144,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 16),
                 _buildStatsRow(context, provider.stats),
                 const SizedBox(height: 16),
+                _buildQuickActions(context),
+                const SizedBox(height: 16),
                 if (hasData) ...[
                   if (hasDashboardStats)
                     _buildAggregatedChartsSection(context, provider.dashboardStats!)
                   else
                     _buildChartsSection(context, provider),
-                  const SizedBox(height: 16),
                 ],
-                _buildQuickActions(context),
                 const SizedBox(height: 16),
                 _buildRecentAnimals(context, provider),
                 const SizedBox(height: 16),
@@ -303,8 +303,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         ),
         const SizedBox(height: 8),
-        RegistrationTimelineChart(animals: animals),
-        const SizedBox(height: 12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -338,8 +336,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         ),
         const SizedBox(height: 8),
-        AggregatedTimelineChart(data: ds.registrationTimeline),
-        const SizedBox(height: 12),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
