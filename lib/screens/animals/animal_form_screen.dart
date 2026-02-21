@@ -294,9 +294,9 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   label: 'Sire (Father)',
                   icon: Icons.male,
                   selectedId: _selectedSireId,
-                  candidates: provider.maleAnimals
-                      .where((a) => a.id != widget.animalId)
-                      .toList(),
+                  candidates: _filterParentCandidates(
+                    provider.maleAnimals,
+                  ),
                   onSelected: (id) => setState(() => _selectedSireId = id),
                 ),
                 const SizedBox(height: 12),
@@ -304,9 +304,9 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   label: 'Dam (Mother)',
                   icon: Icons.female,
                   selectedId: _selectedDamId,
-                  candidates: provider.femaleAnimals
-                      .where((a) => a.id != widget.animalId)
-                      .toList(),
+                  candidates: _filterParentCandidates(
+                    provider.femaleAnimals,
+                  ),
                   onSelected: (id) => setState(() => _selectedDamId = id),
                 ),
 
@@ -733,6 +733,23 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     if (picked != null) {
       setState(() => _pickedImageFile = File(picked.path));
     }
+  }
+
+  /// Filters parent candidates to the same breed as the current animal,
+  /// excludes the animal itself, and only includes animals born before
+  /// the current animal's date of birth (when set).
+  List<Animal> _filterParentCandidates(List<Animal> animals) {
+    final breed = _breedController.text.trim();
+    return animals.where((a) {
+      if (a.id == widget.animalId) return false;
+      if (breed.isNotEmpty && a.breed != breed) return false;
+      if (_dateOfBirth != null &&
+          a.dateOfBirth != null &&
+          !a.dateOfBirth!.isBefore(_dateOfBirth!)) {
+        return false;
+      }
+      return true;
+    }).toList();
   }
 
   Future<void> _pickDateOfBirth() async {
