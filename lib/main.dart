@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
 import 'models/models.dart';
 import 'services/animal_provider.dart';
@@ -32,6 +33,9 @@ import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Use clean path URLs (no # fragment) on the web
+  usePathUrlStrategy();
 
   // Initialize local notifications (no-op on web)
   try {
@@ -67,24 +71,31 @@ class PedigreeManagerApp extends StatelessWidget {
   }
 
   Route<dynamic>? _generateRoute(RouteSettings settings) {
+    final uri = Uri.parse(settings.name ?? '/');
+    final segments = uri.pathSegments;
+
+    // ─── Static routes ──────────────────────────────────────────
+    // Try exact match first for routes without dynamic segments.
     switch (settings.name) {
-      // ─── Public routes ────────────────────────────────────────
       case '/':
-        // Web landing page; on mobile, redirect to login
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) =>
               kIsWeb ? const LandingScreen() : const LoginScreen(),
         );
       case '/login':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const LoginScreen(),
         );
       case '/register':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const RegistrationScreen(),
         );
       case '/forgot-password':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const ForgotPasswordScreen(),
         );
       case '/reset-password':
@@ -92,108 +103,143 @@ class PedigreeManagerApp extends StatelessWidget {
           settings: settings,
           builder: (_) => const ResetPasswordScreen(),
         );
-
-      // ─── Authenticated routes (dashboard) ─────────────────────
       case '/dashboard':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const HomeScreen(),
         );
       case '/account':
         final profile = settings.arguments as UserProfile;
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => AccountScreen(profile: profile),
         );
       case '/team':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const UserManagementScreen(),
         );
       case '/animals':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const AnimalListScreen(),
         );
-      case '/animal/detail':
-        final animalId = settings.arguments as String;
+      case '/animals/new':
         return MaterialPageRoute(
-          builder: (_) => AnimalDetailScreen(animalId: animalId),
-        );
-      case '/animal/add':
-        return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const AnimalFormScreen(),
-        );
-      case '/animal/edit':
-        final animalId = settings.arguments as String;
-        return MaterialPageRoute(
-          builder: (_) => AnimalFormScreen(animalId: animalId),
-        );
-      case '/pedigree':
-        final animalId = settings.arguments as String;
-        return MaterialPageRoute(
-          builder: (_) => PedigreeScreen(animalId: animalId),
         );
       case '/breeding':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const BreedingScreen(),
-        );
-      case '/breeding/suggestions':
-        final animalId = settings.arguments as String;
-        return MaterialPageRoute(
-          builder: (_) => BreedingScreen(selectedAnimalId: animalId),
-        );
-      case '/health':
-        final animalId = settings.arguments as String;
-        return MaterialPageRoute(
-          builder: (_) => HealthRecordsScreen(animalId: animalId),
         );
       case '/litters':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const LitterListScreen(),
         );
       case '/contacts':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const ContactsScreen(),
         );
       case '/coi-calculator':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const CoiCalculatorScreen(),
         );
       case '/stud-matcher':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const StudMatcherScreen(),
-        );
-      case '/stud-matcher/preselected':
-        final studId = settings.arguments as String;
-        return MaterialPageRoute(
-          builder: (_) => StudMatcherScreen(preselectedStudId: studId),
         );
       case '/custom-fields':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const CustomFieldsScreen(),
         );
       case '/data-audit':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const DataAuditScreen(),
         );
       case '/import':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const ImportScreen(),
         );
       case '/export':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const ExportScreen(),
         );
       case '/settings':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const SettingsScreen(),
         );
       case '/support':
         return MaterialPageRoute(
+          settings: settings,
           builder: (_) => const SupportScreen(),
         );
-      default:
-        return MaterialPageRoute(
-          builder: (_) =>
-              kIsWeb ? const LandingScreen() : const LoginScreen(),
-        );
     }
+
+    // ─── Dynamic routes (path contains an ID) ───────────────────
+    // /animals/{id}       → animal detail
+    // /animals/{id}/edit  → animal edit form
+    // /pedigree/{id}      → pedigree tree
+    // /health/{id}        → health records
+    // /breeding/{id}      → breeding suggestions for animal
+    // /stud-matcher/{id}  → stud matcher with preselected stud
+    if (segments.length == 2 && segments[0] == 'animals' && segments[1] != 'new') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => AnimalDetailScreen(animalId: segments[1]),
+      );
+    }
+
+    if (segments.length == 3 && segments[0] == 'animals' && segments[2] == 'edit') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => AnimalFormScreen(animalId: segments[1]),
+      );
+    }
+
+    if (segments.length == 2 && segments[0] == 'pedigree') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => PedigreeScreen(animalId: segments[1]),
+      );
+    }
+
+    if (segments.length == 2 && segments[0] == 'health') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => HealthRecordsScreen(animalId: segments[1]),
+      );
+    }
+
+    if (segments.length == 2 && segments[0] == 'breeding') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => BreedingScreen(selectedAnimalId: segments[1]),
+      );
+    }
+
+    if (segments.length == 2 && segments[0] == 'stud-matcher') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => StudMatcherScreen(preselectedStudId: segments[1]),
+      );
+    }
+
+    // ─── Fallback ───────────────────────────────────────────────
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (_) =>
+          kIsWeb ? const LandingScreen() : const LoginScreen(),
+    );
   }
 }

@@ -165,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onPressed: () async {
           if (!await guardWriteAction(context)) return;
           if (!context.mounted) return;
-          Navigator.pushNamed(context, '/animal/add');
+          Navigator.pushNamed(context, '/animals/new');
         },
         icon: const Icon(Icons.add),
         label: const Text('Add Animal'),
@@ -719,8 +719,7 @@ class _AnimalListTile extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Navigator.pushNamed(
           context,
-          '/animal/detail',
-          arguments: animal.id,
+          '/animals/${animal.id}',
         ),
       ),
     );

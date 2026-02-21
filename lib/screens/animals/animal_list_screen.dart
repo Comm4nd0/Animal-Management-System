@@ -53,7 +53,7 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
           if (!await guardWriteAction(context)) return;
-          Navigator.pushNamed(context, '/animal/add');
+          Navigator.pushNamed(context, '/animals/new');
         },
         child: const Icon(Icons.add),
       ),
@@ -256,8 +256,7 @@ class _AnimalCard extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.pushNamed(
           context,
-          '/animal/detail',
-          arguments: animal.id,
+          '/animals/${animal.id}',
         ),
         borderRadius: BorderRadius.circular(12),
         child: Padding(

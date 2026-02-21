@@ -482,8 +482,7 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
                   ),
                   onTap: () => Navigator.pushNamed(
                     context,
-                    '/animal/detail',
-                    arguments: ancestor.id,
+                    '/animals/${ancestor.id}',
                   ),
                   trailing: const Icon(Icons.chevron_right, size: 18),
                 )),

@@ -395,8 +395,7 @@ class _IssueCard extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right, size: 18),
         onTap: () => Navigator.pushNamed(
           context,
-          '/animal/detail',
-          arguments: issue.animalId,
+          '/animals/${issue.animalId}',
         ),
         isThreeLine: true,
       ),
