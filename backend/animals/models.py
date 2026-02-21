@@ -63,6 +63,7 @@ class Animal(models.Model):
     registration_number = models.CharField(
         max_length=100, blank=True, default='', db_index=True
     )
+    registration_date = models.DateField(null=True, blank=True)
     microchip_number = models.CharField(
         max_length=100, blank=True, default='', db_index=True
     )

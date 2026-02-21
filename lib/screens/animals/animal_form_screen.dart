@@ -32,7 +32,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
 
   String _selectedSpecies = Species.horse;
   Sex _selectedSex = Sex.male;
+  AnimalStatus _selectedStatus = AnimalStatus.alive;
   DateTime? _dateOfBirth;
+  DateTime? _dateOfDeath;
+  DateTime? _registrationDate;
   String? _selectedSireId;
   String? _selectedDamId;
   String? _selectedBreederId;
@@ -62,10 +65,13 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _selectedSpecies = animal.species;
     _breedController.text = animal.breed;
     _selectedSex = animal.sex;
+    _selectedStatus = animal.status;
     _dateOfBirth = animal.dateOfBirth;
+    _dateOfDeath = animal.dateOfDeath;
     _colorController.text = animal.color ?? '';
     _markingsController.text = animal.markings ?? '';
     _regNumberController.text = animal.registrationNumber ?? '';
+    _registrationDate = animal.registrationDate;
     _microchipController.text = animal.microchipNumber ?? '';
     _selectedBreederId = animal.breederId;
     _selectedOwnerId = animal.currentOwnerId;
@@ -227,6 +233,59 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     side: BorderSide(color: Colors.grey.shade400),
                   ),
                 ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<AnimalStatus>(
+                  value: _selectedStatus,
+                  decoration: const InputDecoration(
+                    labelText: 'Status',
+                    prefixIcon: Icon(Icons.flag),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                        value: AnimalStatus.alive, child: Text('Alive')),
+                    DropdownMenuItem(
+                        value: AnimalStatus.deceased, child: Text('Deceased')),
+                    DropdownMenuItem(
+                        value: AnimalStatus.sold, child: Text('Sold')),
+                    DropdownMenuItem(
+                        value: AnimalStatus.transferred,
+                        child: Text('Transferred')),
+                  ],
+                  onChanged: (v) {
+                    setState(() {
+                      _selectedStatus = v!;
+                      // Clear date of death if status changed away from deceased
+                      if (_selectedStatus != AnimalStatus.deceased) {
+                        _dateOfDeath = null;
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: Icon(Icons.event_busy,
+                      color: _dateOfDeath != null ? Colors.red.shade400 : null),
+                  title: Text(_dateOfDeath != null
+                      ? DateFormat('dd MMM yyyy').format(_dateOfDeath!)
+                      : 'Date of Death'),
+                  subtitle: _dateOfDeath == null
+                      ? const Text('Tap to select')
+                      : null,
+                  trailing: _dateOfDeath != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => setState(() {
+                            _dateOfDeath = null;
+                            _selectedStatus = AnimalStatus.alive;
+                          }),
+                        )
+                      : null,
+                  onTap: _pickDateOfDeath,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Colors.grey.shade400),
+                  ),
+                ),
 
                 const SizedBox(height: 24),
                 _buildSectionTitle('Parentage'),
@@ -322,7 +381,28 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     prefixIcon: Icon(Icons.memory),
                   ),
                 ),
-
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: const Icon(Icons.app_registration),
+                  title: Text(_registrationDate != null
+                      ? DateFormat('dd MMM yyyy').format(_registrationDate!)
+                      : 'Registration Date'),
+                  subtitle: _registrationDate == null
+                      ? const Text('Tap to select')
+                      : null,
+                  trailing: _registrationDate != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () =>
+                              setState(() => _registrationDate = null),
+                        )
+                      : null,
+                  onTap: _pickRegistrationDate,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: Colors.grey.shade400),
+                  ),
+                ),
 
                 const SizedBox(height: 24),
                 _buildSectionTitle('Breeder & Owner'),
@@ -664,6 +744,33 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     );
     if (picked != null) {
       setState(() => _dateOfBirth = picked);
+    }
+  }
+
+  Future<void> _pickDateOfDeath() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _dateOfDeath ?? DateTime.now(),
+      firstDate: _dateOfBirth ?? DateTime(1980),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _dateOfDeath = picked;
+        _selectedStatus = AnimalStatus.deceased;
+      });
+    }
+  }
+
+  Future<void> _pickRegistrationDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _registrationDate ?? DateTime.now(),
+      firstDate: DateTime(1980),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() => _registrationDate = picked);
     }
   }
 
@@ -1045,7 +1152,9 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       species: _selectedSpecies,
       breed: _breedController.text.trim(),
       sex: _selectedSex,
+      status: _selectedStatus,
       dateOfBirth: _dateOfBirth,
+      dateOfDeath: _dateOfDeath,
       color: _colorController.text.trim().isEmpty
           ? null
           : _colorController.text.trim(),
@@ -1055,6 +1164,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       registrationNumber: _regNumberController.text.trim().isEmpty
           ? null
           : _regNumberController.text.trim(),
+      registrationDate: _registrationDate,
       microchipNumber: _microchipController.text.trim().isEmpty
           ? null
           : _microchipController.text.trim(),

@@ -15,6 +15,7 @@ class Animal {
   final String? color;
   final String? markings;
   final String? registrationNumber;
+  final DateTime? registrationDate;
   final String? microchipNumber;
   final String? dnaProfileId;
   final String? sireId;
@@ -42,6 +43,7 @@ class Animal {
     this.color,
     this.markings,
     this.registrationNumber,
+    this.registrationDate,
     this.microchipNumber,
     this.dnaProfileId,
     this.sireId,
@@ -94,6 +96,7 @@ class Animal {
     String? color,
     String? markings,
     String? registrationNumber,
+    DateTime? registrationDate,
     String? microchipNumber,
     String? dnaProfileId,
     String? sireId,
@@ -119,6 +122,7 @@ class Animal {
       color: color ?? this.color,
       markings: markings ?? this.markings,
       registrationNumber: registrationNumber ?? this.registrationNumber,
+      registrationDate: registrationDate ?? this.registrationDate,
       microchipNumber: microchipNumber ?? this.microchipNumber,
       dnaProfileId: dnaProfileId ?? this.dnaProfileId,
       sireId: sireId ?? this.sireId,
@@ -149,6 +153,7 @@ class Animal {
       'color': color,
       'markings': markings,
       'registrationNumber': registrationNumber,
+      'registrationDate': registrationDate?.millisecondsSinceEpoch,
       'microchipNumber': microchipNumber,
       'dnaProfileId': dnaProfileId,
       'sireId': sireId,
@@ -183,6 +188,9 @@ class Animal {
       color: map['color'] as String?,
       markings: map['markings'] as String?,
       registrationNumber: map['registrationNumber'] as String?,
+      registrationDate: map['registrationDate'] != null
+          ? DateTime.fromMillisecondsSinceEpoch(map['registrationDate'] as int)
+          : null,
       microchipNumber: map['microchipNumber'] as String?,
       dnaProfileId: map['dnaProfileId'] as String?,
       sireId: map['sireId'] as String?,

@@ -494,6 +494,9 @@ class ApiService {
       color: m['color'] as String?,
       markings: m['markings'] as String?,
       registrationNumber: m['registration_number'] as String?,
+      registrationDate: m['registration_date'] != null
+          ? DateTime.parse(m['registration_date'] as String)
+          : null,
       microchipNumber: m['microchip_number'] as String?,
       dnaProfileId: m['dna_profile_id'] as String?,
       sireId: m['sire'] as String?,
@@ -523,6 +526,7 @@ class ApiService {
       'color': a.color ?? '',
       'markings': a.markings ?? '',
       'registration_number': a.registrationNumber ?? '',
+      'registration_date': a.registrationDate?.toIso8601String().split('T').first,
       'microchip_number': a.microchipNumber ?? '',
       'dna_profile_id': a.dnaProfileId ?? '',
       'sire': a.sireId,

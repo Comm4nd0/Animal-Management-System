@@ -19,7 +19,7 @@ class DatabaseService {
     final path = join(dbPath, 'pedigree_manager.db');
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -38,6 +38,7 @@ class DatabaseService {
         color TEXT,
         markings TEXT,
         registrationNumber TEXT,
+        registrationDate INTEGER,
         microchipNumber TEXT,
         dnaProfileId TEXT,
         sireId TEXT,
@@ -184,6 +185,10 @@ class DatabaseService {
       await _createShowResultsTable(db);
       await _createFinancialRecordsTable(db);
       await _createDocumentAttachmentsTable(db);
+    }
+    if (oldVersion < 5) {
+      await db.execute(
+          'ALTER TABLE animals ADD COLUMN registrationDate INTEGER');
     }
   }
 

@@ -42,7 +42,8 @@ class AnimalListSerializer(serializers.ModelSerializer):
         model = Animal
         fields = [
             'id', 'name', 'species', 'breed', 'sex', 'status',
-            'date_of_birth', 'color', 'registration_number',
+            'date_of_birth', 'date_of_death', 'color', 'registration_number',
+            'registration_date',
             'image', 'profile_image_url', 'age_display', 'sire_name', 'dam_name',
             'breeder', 'breeder_name', 'current_owner', 'owner_name',
             'created_at',
