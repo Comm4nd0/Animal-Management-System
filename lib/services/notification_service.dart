@@ -133,6 +133,27 @@ class NotificationService {
     );
   }
 
+  /// Show a notification when a background job completes.
+  Future<void> notifyJobComplete({
+    required String taskTypeDisplay,
+    required bool isSuccess,
+    required String message,
+  }) async {
+    if (!_initialized) return;
+
+    final title = isSuccess
+        ? '$taskTypeDisplay Complete'
+        : '$taskTypeDisplay Failed';
+
+    await _showNotification(
+      id: 4000 + message.hashCode.abs() % 1000,
+      title: title,
+      body: message,
+      channel: 'background_jobs',
+      channelName: 'Background Jobs',
+    );
+  }
+
   /// Cancel all scheduled notifications.
   Future<void> cancelAllNotifications() async {
     if (!_initialized) return;

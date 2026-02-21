@@ -582,6 +582,78 @@ class ApiService {
     final data = await _get('/tasks/$taskId/');
     return Map<String, dynamic>.from(data);
   }
+
+  /// Start a background bulk import job.
+  Future<Map<String, dynamic>> createBulkImportTask(
+    List<int> fileBytes,
+    String fileName,
+  ) async {
+    final uri = Uri.parse('$baseUrl/tasks/bulk-import/');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll({
+      if (authToken != null) 'Authorization': 'Token $authToken',
+    });
+    request.files.add(
+      http.MultipartFile.fromBytes('file', fileBytes, filename: fileName),
+    );
+    final streamed = await request.send();
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode >= 200 && streamed.statusCode < 300) {
+      return Map<String, dynamic>.from(jsonDecode(body));
+    }
+    throw ApiException(streamed.statusCode, body);
+  }
+
+  /// Start a background bulk export job.
+  Future<Map<String, dynamic>> createBulkExportTask({
+    String format = 'csv',
+  }) async {
+    final data = await _post('/tasks/bulk-export/', {'format': format});
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Start a background dashboard stats computation.
+  Future<Map<String, dynamic>> createDashboardStatsTask() async {
+    final data = await _post('/tasks/dashboard-stats/', {});
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// List all background tasks for the current user.
+  Future<List<Map<String, dynamic>>> listTasks({
+    String? statusFilter,
+    int? taskType,
+    int limit = 20,
+  }) async {
+    final params = <String, String>{'limit': '$limit'};
+    if (statusFilter != null) params['status'] = statusFilter;
+    if (taskType != null) params['task_type'] = '$taskType';
+    final data = await _get('/tasks/list/', queryParams: params);
+    if (data is List) {
+      return List<Map<String, dynamic>>.from(data);
+    }
+    return [];
+  }
+
+  /// List currently active (pending/running) tasks for the current user.
+  Future<List<Map<String, dynamic>>> getActiveTasks() async {
+    final data = await _get('/tasks/active/');
+    if (data is List) {
+      return List<Map<String, dynamic>>.from(data);
+    }
+    return [];
+  }
+
+  /// Cancel a running or pending task.
+  Future<Map<String, dynamic>> cancelTask(String taskId) async {
+    final data = await _post('/tasks/$taskId/cancel/', {});
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Retry a failed or cancelled task.
+  Future<Map<String, dynamic>> retryTask(String taskId) async {
+    final data = await _post('/tasks/$taskId/retry/', {});
+    return Map<String, dynamic>.from(data);
+  }
 }
 
 class ApiException implements Exception {
