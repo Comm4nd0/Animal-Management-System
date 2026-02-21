@@ -294,9 +294,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   label: 'Sire (Father)',
                   icon: Icons.male,
                   selectedId: _selectedSireId,
-                  candidates: _filterParentCandidates(
-                    provider.maleAnimals,
-                  ),
+                  allAnimals: provider.maleAnimals,
                   onSelected: (id) => setState(() => _selectedSireId = id),
                 ),
                 const SizedBox(height: 12),
@@ -304,9 +302,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   label: 'Dam (Mother)',
                   icon: Icons.female,
                   selectedId: _selectedDamId,
-                  candidates: _filterParentCandidates(
-                    provider.femaleAnimals,
-                  ),
+                  allAnimals: provider.femaleAnimals,
                   onSelected: (id) => setState(() => _selectedDamId = id),
                 ),
 
@@ -735,23 +731,35 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     }
   }
 
-  /// Filters parent candidates to the same species and breed as the current
-  /// animal, excludes the animal itself, and only includes animals born before
-  /// the current animal's date of birth (when set).
-  List<Animal> _filterParentCandidates(List<Animal> animals) {
+  /// Filters parent candidates by species, breed, DOB, and search query.
+  /// Accesses form state directly so results are always up-to-date.
+  List<Animal> _filterParentCandidates(
+      List<Animal> animals, String query) {
     final breed = _breedController.text.trim().toLowerCase();
-    final species = _selectedSpecies;
+    final species = _selectedSpecies.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+
     return animals.where((a) {
+      // Exclude self
       if (a.id == widget.animalId) return false;
-      if (a.species != species) return false;
-      if (breed.isNotEmpty &&
-          a.breed.toLowerCase() != breed) {
-        return false;
-      }
+      // Same species
+      if (a.species.toLowerCase() != species) return false;
+      // Same breed (when breed is specified)
+      if (breed.isNotEmpty && a.breed.toLowerCase() != breed) return false;
+      // Parent must be born before this animal
       if (_dateOfBirth != null &&
           a.dateOfBirth != null &&
           !a.dateOfBirth!.isBefore(_dateOfBirth!)) {
         return false;
+      }
+      // Text search by name or registration number
+      if (lowerQuery.isNotEmpty) {
+        final matchesName = a.name.toLowerCase().contains(lowerQuery);
+        final matchesReg = a.registrationNumber
+                ?.toLowerCase()
+                .contains(lowerQuery) ??
+            false;
+        if (!matchesName && !matchesReg) return false;
       }
       return true;
     }).toList();
@@ -811,12 +819,12 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     required String label,
     required IconData icon,
     required String? selectedId,
-    required List<Animal> candidates,
+    required List<Animal> allAnimals,
     required ValueChanged<String?> onSelected,
   }) {
     // Resolve the currently selected animal for display
     final selectedAnimal = selectedId != null
-        ? candidates.cast<Animal?>().firstWhere(
+        ? allAnimals.cast<Animal?>().firstWhere(
               (a) => a!.id == selectedId,
               orElse: () => null,
             )
@@ -835,17 +843,12 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                         text: _formatAnimalDisplay(selectedAnimal))
                     : TextEditingValue.empty,
                 optionsBuilder: (TextEditingValue textEditingValue) {
-                  if (textEditingValue.text.isEmpty) {
-                    return candidates;
-                  }
-                  final query = textEditingValue.text.toLowerCase();
-                  return candidates.where((animal) {
-                    return animal.name.toLowerCase().contains(query) ||
-                        (animal.registrationNumber
-                                ?.toLowerCase()
-                                .contains(query) ??
-                            false);
-                  });
+                  // All filtering (species, breed, DOB, search query)
+                  // happens here so it always uses the latest form state.
+                  return _filterParentCandidates(
+                    allAnimals,
+                    textEditingValue.text,
+                  );
                 },
                 onSelected: (Animal animal) {
                   onSelected(animal.id);
