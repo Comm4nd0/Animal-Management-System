@@ -14,9 +14,7 @@ NC='\033[0m'
 cd "$TERRAFORM_DIR"
 EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null) || { echo "Run deploy.sh --infra first"; exit 1; }
 BACKUP_BUCKET=$(terraform output -raw backup_bucket_name)
-SSH_KEY_PUB=$(grep 'ssh_public_key_path' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/' || echo "~/.ssh/id_rsa.pub")
-SSH_KEY="${SSH_KEY_PUB%.pub}"
-SSH_KEY="${SSH_KEY/#\~/$HOME}"
+SSH_KEY="$HOME/.ssh/p4td-key.pem"
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i $SSH_KEY"
 
 echo -e "${GREEN}[BACKUP]${NC} Running database backup on $EC2_IP..."
@@ -26,8 +24,14 @@ BUCKET=$1
 BACKUP_FILE="/tmp/pedigree_db_$(date +%Y%m%d_%H%M%S).sql.gz"
 
 cd /opt/app
-docker compose -f docker-compose.prod.yml exec -T db \
-    pg_dump -U pedigree_admin pedigree_db | gzip > "$BACKUP_FILE"
+
+# Source .env to get DB credentials
+set -a
+source .env
+set +a
+
+# Dump database from external RDS
+PGPASSWORD="$DB_PASSWORD" pg_dump -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" | gzip > "$BACKUP_FILE"
 
 FILESIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 echo "Backup size: $FILESIZE"

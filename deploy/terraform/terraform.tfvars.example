@@ -1,15 +1,28 @@
 # Copy this file to terraform.tfvars and fill in your values
 # cp terraform.tfvars.example terraform.tfvars
 
-aws_region          = "us-east-1"
-instance_type       = "t4g.small"      # ~$12/month (ARM, 2 vCPU, 2GB RAM)
-ssh_public_key_path = "~/.ssh/id_rsa.pub"
-ebs_volume_size     = 20               # GB
+aws_region      = "eu-west-1"
+instance_type   = "t2.micro"       # Free tier (1 vCPU, 1GB RAM)
+ebs_volume_size = 30               # GB (free tier: up to 30GB)
 
-# Required secrets
-db_password      = "CHANGE_ME_strong_password_here"
-django_secret_key = "CHANGE_ME_use_python_c_from_django.core.management.utils_import_get_random_secret_key_print_get_random_secret_key"
+# ─── Existing Infrastructure ─────────────────────────────────
+# These must match your existing AWS resources in eu-west-1.
 
-# Restrict SSH access to your IP (recommended)
-# Find your IP: curl ifconfig.me
-# allowed_ssh_cidrs = ["YOUR_IP/32"]
+existing_vpc_id            = "vpc-XXXXXXXXXXXXXXXXX"
+existing_subnet_id         = "subnet-XXXXXXXXXXXXXXXXX"
+existing_security_group_id = "sg-XXXXXXXXXXXXXXXXX"
+existing_key_pair_name     = "p4td-key"
+
+# ─── Database (Existing RDS) ─────────────────────────────────
+rds_endpoint  = "your-rds-instance.xxxx.eu-west-1.rds.amazonaws.com"
+rds_db_name   = "pedigree_db"
+rds_username  = "postgres"
+rds_password  = "CHANGE_ME_your_rds_password"
+
+# ─── Application Secrets ─────────────────────────────────────
+django_secret_key = "CHANGE_ME_use_python_c_from_django.core.management.utils_import_get_random_secret_key"
+
+# ─── AWS S3 (Media Storage — optional) ───────────────────────
+# aws_access_key_id     = "AKIAXXXXXXXXXXXXXXXX"
+# aws_secret_access_key = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+# s3_media_bucket       = "your-media-bucket-name"

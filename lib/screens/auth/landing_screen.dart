@@ -1,11 +1,72 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../services/animal_provider.dart';
+import '../../services/api_service.dart';
+import '../../services/demo_service.dart';
 import '../../utils/app_theme.dart';
 import '../../utils/constants.dart';
 
 /// Public-facing landing page for the web app.
 /// Showcases features, service tiers, and provides login/register CTAs.
-class LandingScreen extends StatelessWidget {
+///
+/// Pricing tiers are fetched from the backend API so that any changes
+/// made via Django Admin are reflected immediately. Falls back to the
+/// hardcoded [serviceTiers] constant if the API is unreachable.
+class LandingScreen extends StatefulWidget {
   const LandingScreen({super.key});
+
+  @override
+  State<LandingScreen> createState() => _LandingScreenState();
+}
+
+class _LandingScreenState extends State<LandingScreen> {
+  List<ServiceTierInfo> _tiers = serviceTiers; // fallback to hardcoded
+  bool _tiersLoading = true;
+  bool _isDemoLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchTiers();
+  }
+
+  Future<void> _fetchTiers() async {
+    try {
+      final api = ApiService();
+      final data = await api.getTiers();
+      if (data.isNotEmpty && mounted) {
+        setState(() {
+          _tiers = data;
+          _tiersLoading = false;
+        });
+      } else if (mounted) {
+        setState(() => _tiersLoading = false);
+      }
+    } catch (_) {
+      // API unavailable – keep hardcoded defaults
+      if (mounted) setState(() => _tiersLoading = false);
+    }
+  }
+
+  Future<void> _enterDemo() async {
+    if (_isDemoLoading) return;
+    setState(() => _isDemoLoading = true);
+
+    final provider = context.read<AnimalProvider>();
+    final demoService = DemoService();
+    final success = await demoService.enterDemoMode(provider);
+
+    if (!mounted) return;
+    setState(() => _isDemoLoading = false);
+
+    if (success) {
+      Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (route) => false);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not load demo. Please try again.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +111,26 @@ class LandingScreen extends StatelessWidget {
         TextButton(
           onPressed: () => _scrollToSection(context, 'pricing'),
           child: const Text('Pricing', style: TextStyle(color: Colors.white70)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pushNamed(context, '/support'),
+          child: const Text('Support', style: TextStyle(color: Colors.white70)),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: _isDemoLoading ? null : _enterDemo,
+          icon: _isDemoLoading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.play_circle_outline, size: 18),
+          label: const Text('Try Demo'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+          ),
         ),
         const SizedBox(width: 8),
         TextButton(
@@ -134,7 +215,9 @@ class LandingScreen extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 32),
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
           children: [
             ElevatedButton.icon(
               onPressed: () => Navigator.pushNamed(context, '/register'),
@@ -148,9 +231,8 @@ class LandingScreen extends StatelessWidget {
               icon: const Icon(Icons.arrow_forward),
               label: const Text('Start Free Trial'),
             ),
-            const SizedBox(width: 16),
-            OutlinedButton(
-              onPressed: () => Navigator.pushNamed(context, '/login'),
+            OutlinedButton.icon(
+              onPressed: _isDemoLoading ? null : _enterDemo,
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white,
                 side: const BorderSide(color: Colors.white54),
@@ -158,7 +240,17 @@ class LandingScreen extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
                 textStyle: const TextStyle(fontSize: 16),
               ),
-              child: const Text('Log In'),
+              icon: _isDemoLoading
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.play_circle_outline),
+              label: const Text('Try Demo'),
             ),
           ],
         ),
@@ -288,6 +380,7 @@ class LandingScreen extends StatelessWidget {
             'Everything You Need',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade900,
                 ),
           ),
           const SizedBox(height: 8),
@@ -317,6 +410,7 @@ class LandingScreen extends StatelessWidget {
     final isWide = MediaQuery.of(context).size.width > 800;
 
     return Container(
+      color: Colors.white,
       padding: EdgeInsets.symmetric(
         horizontal: isWide ? 80 : 24,
         vertical: 64,
@@ -327,6 +421,7 @@ class LandingScreen extends StatelessWidget {
             'Simple, Transparent Pricing',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade900,
                 ),
           ),
           const SizedBox(height: 8),
@@ -337,17 +432,23 @@ class LandingScreen extends StatelessWidget {
                 ),
           ),
           const SizedBox(height: 40),
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            alignment: WrapAlignment.center,
-            children: serviceTiers
-                .map((tier) => SizedBox(
-                      width: isWide ? 260 : double.infinity,
-                      child: _PricingCard(tier: tier),
-                    ))
-                .toList(),
-          ),
+          if (_tiersLoading)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: CircularProgressIndicator(),
+            )
+          else
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              alignment: WrapAlignment.center,
+              children: _tiers
+                  .map((tier) => SizedBox(
+                        width: isWide ? 260 : double.infinity,
+                        child: _PricingCard(tier: tier),
+                      ))
+                  .toList(),
+            ),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(16),
@@ -401,6 +502,7 @@ class LandingScreen extends StatelessWidget {
             'Built for Farm Animals & Horses',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade900,
                 ),
           ),
           const SizedBox(height: 8),
@@ -511,7 +613,7 @@ class LandingScreen extends StatelessWidget {
                     const Text('Terms', style: TextStyle(color: Colors.white38)),
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () => Navigator.pushNamed(context, '/support'),
                 child:
                     const Text('Contact', style: TextStyle(color: Colors.white38)),
               ),
@@ -544,6 +646,7 @@ class _FeatureCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 1,
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -559,6 +662,7 @@ class _FeatureCard extends StatelessWidget {
               feature.title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: Colors.grey.shade900,
                   ),
             ),
             const SizedBox(height: 8),
@@ -587,6 +691,7 @@ class _PricingCard extends StatelessWidget {
 
     return Card(
       elevation: isEnterprise ? 4 : 1,
+      color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: isEnterprise
@@ -621,6 +726,7 @@ class _PricingCard extends StatelessWidget {
                   tier.label,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
+                        color: Colors.grey.shade900,
                       ),
                 ),
                 const SizedBox(height: 12),
@@ -633,7 +739,7 @@ class _PricingCard extends StatelessWidget {
                 ),
                 Text(
                   'animals',
-                  style: TextStyle(color: Colors.grey.shade500),
+                  style: TextStyle(color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 20),
                 _pricingFeature(
@@ -692,14 +798,14 @@ class _PricingCard extends StatelessWidget {
           Icon(
             included ? Icons.check_circle : Icons.cancel,
             size: 18,
-            color: included ? AppTheme.primaryColor : Colors.grey.shade300,
+            color: included ? AppTheme.primaryColor : Colors.grey.shade400,
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               text,
               style: TextStyle(
-                color: included ? Colors.black87 : Colors.grey.shade400,
+                color: included ? Colors.grey.shade800 : Colors.grey.shade500,
                 decoration: included ? null : TextDecoration.lineThrough,
               ),
             ),
@@ -724,6 +830,7 @@ class _SpeciesChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
+      color: Colors.white,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         child: Column(
@@ -736,11 +843,14 @@ class _SpeciesChip extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               name,
-              style: const TextStyle(fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: Colors.grey.shade900,
+              ),
             ),
             Text(
               detail,
-              style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
           ],
         ),

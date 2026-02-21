@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class ContactsScreen extends StatelessWidget {
   const ContactsScreen({super.key});
@@ -26,7 +27,10 @@ class ContactsScreen extends StatelessWidget {
                   const Text('No contacts yet'),
                   const SizedBox(height: 8),
                   ElevatedButton.icon(
-                    onPressed: () => _showContactForm(context),
+                    onPressed: () async {
+                      if (!await guardWriteAction(context)) return;
+                      _showContactForm(context);
+                    },
                     icon: const Icon(Icons.person_add),
                     label: const Text('Add Contact'),
                   ),
@@ -42,15 +46,24 @@ class ContactsScreen extends StatelessWidget {
               final contact = contacts[index];
               return _ContactCard(
                 contact: contact,
-                onEdit: () => _showContactForm(context, contact: contact),
-                onDelete: () => _confirmDelete(context, contact),
+                onEdit: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _showContactForm(context, contact: contact);
+                },
+                onDelete: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _confirmDelete(context, contact);
+                },
               );
             },
           );
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showContactForm(context),
+        onPressed: () async {
+          if (!await guardWriteAction(context)) return;
+          _showContactForm(context);
+        },
         icon: const Icon(Icons.person_add),
         label: const Text('Add Contact'),
       ),

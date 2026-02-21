@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/animal_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class WeightRecordsTab extends StatelessWidget {
   final String animalId;
@@ -21,7 +22,10 @@ class WeightRecordsTab extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(8),
               child: ElevatedButton.icon(
-                onPressed: () => _showAddDialog(context, provider),
+                onPressed: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _showAddDialog(context, provider);
+                },
                 icon: const Icon(Icons.add),
                 label: const Text('Add Weight Entry'),
               ),
@@ -74,8 +78,10 @@ class WeightRecordsTab extends StatelessWidget {
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline,
                                   color: Colors.red),
-                              onPressed: () => _confirmDelete(
-                                  context, provider, record),
+                              onPressed: () async {
+                                if (!await guardWriteAction(context)) return;
+                                _confirmDelete(context, provider, record);
+                              },
                             ),
                           ),
                         );
@@ -230,7 +236,7 @@ class _WeightChart extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 return SideTitleWidget(
-                  meta: meta,
+                  axisSide: meta.axisSide,
                   child: Text(
                     DateFormat.MMMd().format(sorted[idx].date),
                     style: const TextStyle(fontSize: 9),
@@ -244,7 +250,7 @@ class _WeightChart extends StatelessWidget {
               showTitles: true,
               reservedSize: 40,
               getTitlesWidget: (value, meta) => SideTitleWidget(
-                meta: meta,
+                axisSide: meta.axisSide,
                 child: Text('${value.toStringAsFixed(0)}',
                     style: const TextStyle(fontSize: 10)),
               ),

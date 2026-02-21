@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class HealthRecordsScreen extends StatefulWidget {
   final String animalId;
@@ -36,7 +37,10 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
               ? _buildEmptyState()
               : _buildRecordsList(provider),
           floatingActionButton: FloatingActionButton(
-            onPressed: () => _showAddRecordDialog(context),
+            onPressed: () async {
+              if (!await guardWriteAction(context)) return;
+              _showAddRecordDialog(context);
+            },
             child: const Icon(Icons.add),
           ),
         );
@@ -80,24 +84,27 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
             color: Colors.red,
             child: const Icon(Icons.delete, color: Colors.white),
           ),
-          confirmDismiss: (_) => showDialog<bool>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Delete Record'),
-              content: const Text('Are you sure?'),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text('Delete'),
-                ),
-              ],
-            ),
-          ),
+          confirmDismiss: (_) async {
+            if (!await guardWriteAction(context)) return false;
+            return showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Delete Record'),
+                content: const Text('Are you sure?'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    style: TextButton.styleFrom(foregroundColor: Colors.red),
+                    child: const Text('Delete'),
+                  ),
+                ],
+              ),
+            );
+          },
           onDismissed: (_) {
             provider.deleteHealthRecord(record.id, widget.animalId);
           },
@@ -307,7 +314,7 @@ class _HealthRecordsScreenState extends State<HealthRecordsScreen> {
       case HealthRecordType.vaccination:
         return Icons.vaccines;
       case HealthRecordType.examination:
-        return Icons.stethoscope;
+        return Icons.medical_services;
       case HealthRecordType.surgery:
         return Icons.local_hospital;
       case HealthRecordType.medication:

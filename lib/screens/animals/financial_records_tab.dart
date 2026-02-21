@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/animal_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class FinancialRecordsTab extends StatelessWidget {
   final String animalId;
@@ -20,7 +21,10 @@ class FinancialRecordsTab extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(8),
               child: ElevatedButton.icon(
-                onPressed: () => _showAddDialog(context, provider),
+                onPressed: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _showAddDialog(context, provider);
+                },
                 icon: const Icon(Icons.add),
                 label: const Text('Add Transaction'),
               ),
@@ -81,8 +85,10 @@ class FinancialRecordsTab extends StatelessWidget {
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline,
                                   color: Colors.red),
-                              onPressed: () => _confirmDelete(
-                                  context, provider, record),
+                              onPressed: () async {
+                                if (!await guardWriteAction(context)) return;
+                                _confirmDelete(context, provider, record);
+                              },
                             ),
                           ),
                         );

@@ -14,10 +14,10 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy project
+# Copy project (includes backend/frontend/ if built with `make build-web`)
 COPY . .
 
-# Collect static files
+# Collect static files (includes Flutter frontend assets via STATICFILES_DIRS)
 RUN python manage.py collectstatic --noinput 2>/dev/null || true
 
 EXPOSE 8000

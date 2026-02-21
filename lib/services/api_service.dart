@@ -1,84 +1,74 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import '../models/models.dart';
+import '../utils/constants.dart';
 
 /// REST API client for the Django backend.
 ///
-/// Configure [baseUrl] to point to your deployed Django server.
-/// Defaults to localhost for development.
+/// When running on the web and served by Django, auto-detects the API URL
+/// from the browser origin. For mobile or when API_BASE_URL is set explicitly,
+/// uses the provided value.
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
   /// Base URL for the Django REST API.
-  /// Change this to your production URL when deploying.
-  String baseUrl = const String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:8000/api/v1',
-  );
+  /// On web builds served by Django, defaults to same-origin /api/v1.
+  /// On mobile, defaults to the Android emulator loopback.
+  static String _defaultBaseUrl() {
+    const env = String.fromEnvironment('API_BASE_URL');
+    if (env.isNotEmpty) return env;
+    return kIsWeb ? '/api/v1' : 'http://10.0.2.2:8000/api/v1';
+  }
 
-  final HttpClient _client = HttpClient();
+  String baseUrl = _defaultBaseUrl();
+
   String? authToken;
+
+  Map<String, String> get _headers => {
+        'Content-Type': 'application/json',
+        if (authToken != null) 'Authorization': 'Token $authToken',
+      };
 
   // ─── HTTP Helpers ─────────────────────────────────────────────
 
   Future<dynamic> _get(String path, {Map<String, String>? queryParams}) async {
-    final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
-    final request = await _client.getUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
+    var uri = Uri.parse('$baseUrl$path');
+    if (queryParams != null && queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
     }
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response = await http.get(uri, headers: _headers);
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(body);
+      return jsonDecode(response.body);
     }
-    throw ApiException(response.statusCode, body);
+    throw ApiException(response.statusCode, response.body);
   }
 
   Future<dynamic> _post(String path, Map<String, dynamic> data) async {
     final uri = Uri.parse('$baseUrl$path');
-    final request = await _client.postUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
-    }
-    request.write(jsonEncode(data));
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response =
+        await http.post(uri, headers: _headers, body: jsonEncode(data));
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(body);
+      return jsonDecode(response.body);
     }
-    throw ApiException(response.statusCode, body);
+    throw ApiException(response.statusCode, response.body);
   }
 
   Future<dynamic> _put(String path, Map<String, dynamic> data) async {
     final uri = Uri.parse('$baseUrl$path');
-    final request = await _client.putUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
-    }
-    request.write(jsonEncode(data));
-    final response = await request.close();
-    final body = await response.transform(utf8.decoder).join();
+    final response =
+        await http.put(uri, headers: _headers, body: jsonEncode(data));
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(body);
+      return jsonDecode(response.body);
     }
-    throw ApiException(response.statusCode, body);
+    throw ApiException(response.statusCode, response.body);
   }
 
   Future<void> _delete(String path) async {
     final uri = Uri.parse('$baseUrl$path');
-    final request = await _client.deleteUrl(uri);
-    request.headers.set('Content-Type', 'application/json');
-    if (authToken != null) {
-      request.headers.set('Authorization', 'Token $authToken');
-    }
-    final response = await request.close();
-    await response.drain();
+    final response = await http.delete(uri, headers: _headers);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw ApiException(response.statusCode, 'Delete failed');
     }
@@ -99,6 +89,32 @@ class ApiService {
     final data = await _get('/animals/', queryParams: params.isEmpty ? null : params);
     final results = data['results'] as List? ?? data as List;
     return results.map((m) => _animalFromApi(m)).toList();
+  }
+
+  /// Fetch ALL animals across all pages of paginated results.
+  Future<List<Animal>> getAllAnimals() async {
+    final all = <Animal>[];
+    String? nextUrl = '$baseUrl/animals/?page_size=5000';
+
+    while (nextUrl != null) {
+      final uri = Uri.parse(nextUrl);
+      final response = await http.get(uri, headers: _headers);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw ApiException(response.statusCode, response.body);
+      }
+      final data = jsonDecode(response.body);
+      if (data is Map) {
+        final results = data['results'] as List? ?? [];
+        all.addAll(results.map((m) => _animalFromApi(m)));
+        nextUrl = data['next'] as String?;
+      } else if (data is List) {
+        all.addAll((data).map((m) => _animalFromApi(m)));
+        nextUrl = null;
+      } else {
+        nextUrl = null;
+      }
+    }
+    return all;
   }
 
   Future<Animal> getAnimal(String id) async {
@@ -130,6 +146,26 @@ class ApiService {
   Future<Map<String, dynamic>> getDashboardStats() async {
     final data = await _get('/animals/dashboard-stats/');
     return Map<String, dynamic>.from(data);
+  }
+
+  // ─── Service Tiers ─────────────────────────────────────────
+
+  /// Fetch the list of service tiers from the backend.
+  /// Returns tier info as configured in Django Admin (or hard-coded defaults).
+  Future<List<ServiceTierInfo>> getTiers() async {
+    final data = await _get('/accounts/tiers/');
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) {
+      final tierIndex = m['tier_id'] as int;
+      return ServiceTierInfo(
+        tier: ServiceTier.values[tierIndex],
+        label: m['label'] as String,
+        description: m['description'] as String? ?? '',
+        maxAnimals: m['max_animals'] as int?,
+        allowsMultiBreed: m['allows_multi_breed'] as bool? ?? false,
+        maxUsers: m['max_users'] as int?,
+      );
+    }).toList();
   }
 
   // ─── Authentication ─────────────────────────────────────────
@@ -296,6 +332,81 @@ class ApiService {
 
   Future<void> deleteCustomFieldDefinition(String id) async {
     await _delete('/custom-fields/$id/');
+  }
+
+  // ─── Support Messaging ─────────────────────────────────────────
+
+  /// List all support tickets for the authenticated user.
+  Future<List<SupportTicket>> getSupportTickets() async {
+    final data = await _get('/support/');
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results
+        .map((m) => SupportTicket.fromListApi(m as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Get a specific support ticket with all messages (authenticated).
+  Future<SupportTicket> getSupportTicket(String id) async {
+    final data = await _get('/support/$id/');
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Create a new support ticket.
+  /// For guests: name, email, and phone are required.
+  /// For authenticated users: those fields are optional.
+  Future<SupportTicket> createSupportTicket({
+    required String subject,
+    required String message,
+    String guestName = '',
+    String guestEmail = '',
+    String guestPhone = '',
+  }) async {
+    final data = await _post('/support/create/', {
+      'subject': subject,
+      'message': message,
+      'guest_name': guestName,
+      'guest_email': guestEmail,
+      'guest_phone': guestPhone,
+    });
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Reply to a support ticket (authenticated user).
+  Future<SupportTicket> replySupportTicket(String ticketId, String message) async {
+    final data = await _post('/support/$ticketId/reply/', {
+      'message': message,
+    });
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Mark all staff replies as read for a ticket.
+  Future<void> markSupportTicketRead(String ticketId) async {
+    await _post('/support/$ticketId/mark-read/', {});
+  }
+
+  /// Close a support ticket.
+  Future<void> closeSupportTicket(String ticketId) async {
+    await _post('/support/$ticketId/close/', {});
+  }
+
+  /// Get unread support message count.
+  Future<int> getSupportUnreadCount() async {
+    final data = await _get('/support/unread-count/');
+    return data['unread_count'] as int? ?? 0;
+  }
+
+  /// Get a guest ticket by its UUID.
+  Future<SupportTicket> getGuestSupportTicket(String ticketId) async {
+    final data = await _get('/support/guest/$ticketId/');
+    return SupportTicket.fromDetailApi(data);
+  }
+
+  /// Reply to a guest ticket.
+  Future<SupportTicket> replyGuestSupportTicket(String ticketId, String message) async {
+    final data = await _post('/support/guest/$ticketId/reply/', {
+      'message': message,
+    });
+    return SupportTicket.fromDetailApi(data);
   }
 
   // ─── Serialization Helpers ────────────────────────────────────

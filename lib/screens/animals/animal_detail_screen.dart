@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/animal_provider.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 import 'weight_records_tab.dart';
 import 'show_results_tab.dart';
 import 'financial_records_tab.dart';
@@ -69,11 +70,14 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             actions: [
               IconButton(
                 icon: const Icon(Icons.edit),
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  '/animal/edit',
-                  arguments: animal.id,
-                ),
+                onPressed: () async {
+                  if (!await guardWriteAction(context)) return;
+                  Navigator.pushNamed(
+                    context,
+                    '/animal/edit',
+                    arguments: animal.id,
+                  );
+                },
               ),
               PopupMenuButton<String>(
                 onSelected: (value) => _handleMenuAction(value, animal),
@@ -477,13 +481,19 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               ElevatedButton.icon(
-                onPressed: () => _addPhoto(animal.id, ImageSource.gallery),
+                onPressed: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _addPhoto(animal.id, ImageSource.gallery);
+                },
                 icon: const Icon(Icons.photo_library),
                 label: const Text('Add from Gallery'),
               ),
               const SizedBox(width: 8),
               ElevatedButton.icon(
-                onPressed: () => _addPhoto(animal.id, ImageSource.camera),
+                onPressed: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _addPhoto(animal.id, ImageSource.camera);
+                },
                 icon: const Icon(Icons.camera_alt),
                 label: const Text('Take Photo'),
               ),
@@ -521,10 +531,14 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                     return _PhotoTile(
                       image: img,
                       onTap: () => _showFullImage(context, img.imagePath),
-                      onSetProfile: () => provider.setProfileImage(
-                          animal.id, img.id),
-                      onDelete: () => _confirmDeleteImage(
-                          img.id, animal.id, provider),
+                      onSetProfile: () async {
+                        if (!await guardWriteAction(context)) return;
+                        provider.setProfileImage(animal.id, img.id);
+                      },
+                      onDelete: () async {
+                        if (!await guardWriteAction(context)) return;
+                        _confirmDeleteImage(img.id, animal.id, provider);
+                      },
                     );
                   },
                 ),
@@ -698,7 +712,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       case HealthRecordType.vaccination:
         return Icons.vaccines;
       case HealthRecordType.examination:
-        return Icons.stethoscope;
+        return Icons.medical_services;
       case HealthRecordType.surgery:
         return Icons.local_hospital;
       case HealthRecordType.medication:
@@ -714,7 +728,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     }
   }
 
-  void _handleMenuAction(String action, Animal animal) {
+  Future<void> _handleMenuAction(String action, Animal animal) async {
     switch (action) {
       case 'pedigree':
         Navigator.pushNamed(context, '/pedigree', arguments: animal.id);
@@ -728,6 +742,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             arguments: animal.id);
         break;
       case 'delete':
+        if (!await guardWriteAction(context)) return;
         _confirmDelete(animal);
         break;
     }

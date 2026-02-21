@@ -27,6 +27,7 @@ import 'screens/import_export/import_screen.dart';
 import 'screens/import_export/export_screen.dart';
 import 'screens/custom_fields/custom_fields_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/support/support_screen.dart';
 import 'services/notification_service.dart';
 
 void main() async {
@@ -183,6 +184,10 @@ class PedigreeManagerApp extends StatelessWidget {
       case '/settings':
         return MaterialPageRoute(
           builder: (_) => const SettingsScreen(),
+        );
+      case '/support':
+        return MaterialPageRoute(
+          builder: (_) => const SupportScreen(),
         );
       default:
         return MaterialPageRoute(

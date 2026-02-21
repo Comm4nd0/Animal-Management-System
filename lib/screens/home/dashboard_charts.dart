@@ -314,7 +314,7 @@ class BreedDistributionChart extends StatelessWidget {
                       }
                       final label = top[idx].key;
                       return SideTitleWidget(
-                        meta: meta,
+                        axisSide: meta.axisSide,
                         child: SizedBox(
                           width: 60,
                           child: Text(

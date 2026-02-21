@@ -4,10 +4,12 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/models.dart';
+import 'api_service.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
 import 'notification_service.dart';
 import 'pedigree_validator.dart';
+import 'api_service.dart';
 import 'sync_service.dart';
 
 /// Central state management provider for all animal-related data.
@@ -48,6 +50,19 @@ class AnimalProvider extends ChangeNotifier {
 
   void setAuthToken(String? token) {
     _authToken = token;
+    notifyListeners();
+  }
+
+  // ─── Demo Mode ────────────────────────────────────────────
+  bool _isDemoMode = false;
+  bool get isDemoMode => _isDemoMode;
+
+  /// Whether the current session can create/edit/delete data.
+  /// Returns false in demo mode OR for read-only users.
+  bool get canWrite => !_isDemoMode && canWriteData;
+
+  void setDemoMode(bool value) {
+    _isDemoMode = value;
     notifyListeners();
   }
 
@@ -99,7 +114,7 @@ class AnimalProvider extends ChangeNotifier {
     return _userProfile!.validateAnimalAddition(species, breed);
   }
 
-  void setUserProfile(UserProfile profile) {
+  void setUserProfile(UserProfile? profile) {
     _userProfile = profile;
     notifyListeners();
   }
@@ -126,24 +141,28 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addTeamMember(TeamMember member) async {
+    if (!canWrite) return;
     await _db.insertTeamMember(member);
     _teamMembers = await _db.getAllTeamMembers();
     notifyListeners();
   }
 
   Future<void> updateTeamMemberRole(String memberId, int role) async {
+    if (!canWrite) return;
     await _db.updateTeamMemberRole(memberId, role);
     _teamMembers = await _db.getAllTeamMembers();
     notifyListeners();
   }
 
   Future<void> removeTeamMember(String memberId) async {
+    if (!canWrite) return;
     await _db.deleteTeamMember(memberId);
     _teamMembers = await _db.getAllTeamMembers();
     notifyListeners();
   }
 
   Future<void> replaceAllTeamMembers(List<TeamMember> members) async {
+    if (!canWrite) return;
     await _db.replaceAllTeamMembers(members);
     _teamMembers = members;
     notifyListeners();
@@ -219,6 +238,50 @@ class AnimalProvider extends ChangeNotifier {
     }
   }
 
+  /// Loads all data directly from the API into memory, bypassing SQLite.
+  /// Used for web demo mode where sqflite is not available.
+  Future<void> loadAllFromApi() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      final api = ApiService();
+
+      // Load the first page of each resource for a fast demo entry.
+      // This gives the user a representative sample of data instantly.
+      _animals = await api.getAnimals();
+      _contacts = await api.getContacts();
+
+      try {
+        _breedingRecords = await api.getActiveBreedings();
+      } catch (_) {
+        _breedingRecords = [];
+      }
+
+      try {
+        _litters = await api.getLitters();
+      } catch (_) {
+        _litters = [];
+      }
+
+      try {
+        _customFieldDefinitions = await api.getCustomFieldDefinitions();
+      } catch (_) {
+        _customFieldDefinitions = [];
+      }
+
+      // Build stats from the loaded animals
+      final statsMap = <String, int>{};
+      for (final animal in _animals) {
+        statsMap[animal.species] = (statsMap[animal.species] ?? 0) + 1;
+      }
+      _stats = statsMap;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ─── Sync ──────────────────────────────────────────────────────
 
   bool _isSyncing = false;
@@ -276,6 +339,7 @@ class AnimalProvider extends ChangeNotifier {
   /// Adds an animal after validating pedigree integrity.
   /// Returns null on success, or an error message string.
   Future<String?> addAnimal(Animal animal) async {
+    if (!canWrite) return 'Demo mode: write operations are disabled.';
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
@@ -289,6 +353,7 @@ class AnimalProvider extends ChangeNotifier {
   /// Updates an animal after validating pedigree integrity.
   /// Returns null on success, or an error message string.
   Future<String?> updateAnimal(Animal animal) async {
+    if (!canWrite) return 'Demo mode: write operations are disabled.';
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
@@ -299,6 +364,7 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> deleteAnimal(String id) async {
+    if (!canWrite) return;
     await _db.deleteAnimal(id);
     _animals = await _db.getAllAnimals();
     _stats = await _db.getAnimalStats();
@@ -325,18 +391,21 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addContact(Contact contact) async {
+    if (!canWrite) return;
     await _db.insertContact(contact);
     _contacts = await _db.getAllContacts();
     notifyListeners();
   }
 
   Future<void> updateContact(Contact contact) async {
+    if (!canWrite) return;
     await _db.updateContact(contact);
     _contacts = await _db.getAllContacts();
     notifyListeners();
   }
 
   Future<void> deleteContact(String id) async {
+    if (!canWrite) return;
     await _db.deleteContact(id);
     _contacts = await _db.getAllContacts();
     notifyListeners();
@@ -345,12 +414,14 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Health Records ───────────────────────────────────────────
 
   Future<void> addHealthRecord(HealthRecord record) async {
+    if (!canWrite) return;
     await _db.insertHealthRecord(record);
     _healthRecords = await _db.getHealthRecords(record.animalId);
     notifyListeners();
   }
 
   Future<void> deleteHealthRecord(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteHealthRecord(id);
     _healthRecords = await _db.getHealthRecords(animalId);
     notifyListeners();
@@ -460,12 +531,14 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Breeding Records ────────────────────────────────────────
 
   Future<void> addBreedingRecord(BreedingRecord record) async {
+    if (!canWrite) return;
     await _db.insertBreedingRecord(record);
     _breedingRecords = await _db.getActiveBreedings();
     notifyListeners();
   }
 
   Future<void> updateBreedingRecord(BreedingRecord record) async {
+    if (!canWrite) return;
     await _db.updateBreedingRecord(record);
     _breedingRecords = await _db.getActiveBreedings();
     notifyListeners();
@@ -474,6 +547,7 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Litters ──────────────────────────────────────────────────
 
   Future<void> addLitter(Litter litter) async {
+    if (!canWrite) return;
     await _db.insertLitter(litter);
     _litters = await _db.getAllLitters();
     notifyListeners();
@@ -503,18 +577,21 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addCustomFieldDefinition(CustomFieldDefinition field) async {
+    if (!canWrite) return;
     await _db.insertCustomFieldDefinition(field);
     _customFieldDefinitions = await _db.getCustomFieldDefinitions();
     notifyListeners();
   }
 
   Future<void> updateCustomFieldDefinition(CustomFieldDefinition field) async {
+    if (!canWrite) return;
     await _db.updateCustomFieldDefinition(field);
     _customFieldDefinitions = await _db.getCustomFieldDefinitions();
     notifyListeners();
   }
 
   Future<void> deleteCustomFieldDefinition(String id) async {
+    if (!canWrite) return;
     // Find the field key to remove values from all animals
     final field = _customFieldDefinitions.firstWhere(
       (f) => f.id == id,
@@ -551,12 +628,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addWeightRecord(WeightRecord record) async {
+    if (!canWrite) return;
     await _db.insertWeightRecord(record);
     _weightRecords = await _db.getWeightRecords(record.animalId);
     notifyListeners();
   }
 
   Future<void> deleteWeightRecord(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteWeightRecord(id);
     _weightRecords = await _db.getWeightRecords(animalId);
     notifyListeners();
@@ -573,12 +652,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addShowResult(ShowResult result) async {
+    if (!canWrite) return;
     await _db.insertShowResult(result);
     _showResults = await _db.getShowResults(result.animalId);
     notifyListeners();
   }
 
   Future<void> deleteShowResult(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteShowResult(id);
     _showResults = await _db.getShowResults(animalId);
     notifyListeners();
@@ -595,12 +676,14 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addFinancialRecord(FinancialRecord record) async {
+    if (!canWrite) return;
     await _db.insertFinancialRecord(record);
     _financialRecords = await _db.getFinancialRecords(record.animalId);
     notifyListeners();
   }
 
   Future<void> deleteFinancialRecord(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteFinancialRecord(id);
     _financialRecords = await _db.getFinancialRecords(animalId);
     notifyListeners();
@@ -617,15 +700,105 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> addDocumentAttachment(DocumentAttachment doc) async {
+    if (!canWrite) return;
     await _db.insertDocumentAttachment(doc);
     _documentAttachments = await _db.getDocumentAttachments(doc.animalId);
     notifyListeners();
   }
 
   Future<void> deleteDocumentAttachment(String id, String animalId) async {
+    if (!canWrite) return;
     await _db.deleteDocumentAttachment(id);
     _documentAttachments = await _db.getDocumentAttachments(animalId);
     notifyListeners();
+  }
+
+  // ─── Support Messaging ──────────────────────────────────────
+
+  final ApiService _api = ApiService();
+  List<SupportTicket> _supportTickets = [];
+  int _supportUnreadCount = 0;
+
+  List<SupportTicket> get supportTickets => _supportTickets;
+  int get supportUnreadCount => _supportUnreadCount;
+
+  Future<void> loadSupportTickets() async {
+    if (!isLoggedIn) return;
+    try {
+      _supportTickets = await _api.getSupportTickets();
+      notifyListeners();
+    } catch (_) {
+      // Silently fail — support is non-critical
+    }
+  }
+
+  Future<SupportTicket> loadSupportTicketDetail(String ticketId) async {
+    return await _api.getSupportTicket(ticketId);
+  }
+
+  Future<SupportTicket> createSupportTicket({
+    required String subject,
+    required String message,
+    String guestName = '',
+    String guestEmail = '',
+    String guestPhone = '',
+  }) async {
+    final ticket = await _api.createSupportTicket(
+      subject: subject,
+      message: message,
+      guestName: guestName,
+      guestEmail: guestEmail,
+      guestPhone: guestPhone,
+    );
+    if (isLoggedIn) {
+      await loadSupportTickets();
+    }
+    return ticket;
+  }
+
+  Future<SupportTicket> replySupportTicket(String ticketId, String message) async {
+    final ticket = await _api.replySupportTicket(ticketId, message);
+    await loadSupportTickets();
+    return ticket;
+  }
+
+  Future<void> markSupportTicketRead(String ticketId) async {
+    await _api.markSupportTicketRead(ticketId);
+    await loadSupportUnreadCount();
+  }
+
+  Future<void> closeSupportTicket(String ticketId) async {
+    await _api.closeSupportTicket(ticketId);
+    await loadSupportTickets();
+  }
+
+  Future<void> loadSupportUnreadCount() async {
+    if (!isLoggedIn) {
+      _supportUnreadCount = 0;
+      return;
+    }
+    try {
+      final previousCount = _supportUnreadCount;
+      _supportUnreadCount = await _api.getSupportUnreadCount();
+      notifyListeners();
+
+      // Trigger a push notification when new unread messages arrive
+      if (_supportUnreadCount > previousCount && _supportUnreadCount > 0) {
+        NotificationService().notifySupportUnread(_supportUnreadCount);
+      }
+    } catch (_) {
+      _supportUnreadCount = 0;
+    }
+  }
+
+  // Guest support helpers (ticket ID stored locally by the UI)
+
+  Future<SupportTicket> loadGuestSupportTicket(String ticketId) async {
+    return await _api.getGuestSupportTicket(ticketId);
+  }
+
+  Future<SupportTicket> replyGuestSupportTicket(String ticketId, String message) async {
+    return await _api.replyGuestSupportTicket(ticketId, message);
   }
 
   // ─── Filters ──────────────────────────────────────────────────

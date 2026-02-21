@@ -48,21 +48,13 @@ done
 
 check_prereqs() {
     local missing=()
-    command -v aws >/dev/null 2>&1       || missing+=("aws (AWS CLI)")
     command -v terraform >/dev/null 2>&1  || missing+=("terraform")
     command -v ssh >/dev/null 2>&1        || missing+=("ssh")
     command -v rsync >/dev/null 2>&1      || missing+=("rsync")
 
-    if $DO_APP; then
-        command -v flutter >/dev/null 2>&1 || missing+=("flutter")
-    fi
-
     if [ ${#missing[@]} -gt 0 ]; then
         err "Missing required tools: ${missing[*]}"
     fi
-
-    # Check AWS credentials
-    aws sts get-caller-identity >/dev/null 2>&1 || err "AWS credentials not configured. Run 'aws configure' first."
 
     # Check terraform.tfvars exists
     if [ ! -f "$TERRAFORM_DIR/terraform.tfvars" ]; then
@@ -83,8 +75,8 @@ provision_infra() {
 
     log "Infrastructure provisioned successfully!"
     echo ""
-    info "Waiting 60s for EC2 instance to finish bootstrapping..."
-    sleep 60
+    info "Waiting 90s for EC2 instance to finish bootstrapping..."
+    sleep 90
 }
 
 # ─── Terraform: Destroy Infrastructure ────────────────────────
@@ -107,20 +99,21 @@ destroy_infra() {
 get_outputs() {
     cd "$TERRAFORM_DIR"
     EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null) || err "No terraform outputs found. Run with --infra first."
-    S3_BUCKET=$(terraform output -raw frontend_bucket_name)
-    CLOUDFRONT_ID=$(terraform output -raw cloudfront_distribution_id)
-    CLOUDFRONT_DOMAIN=$(terraform output -raw cloudfront_domain_name)
-    API_URL=$(terraform output -raw api_url)
 
-    # Get sensitive values from tfvars
-    DB_PASSWORD=$(grep 'db_password' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/')
+    # Get values from tfvars
+    RDS_ENDPOINT=$(grep 'rds_endpoint' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/')
+    RDS_DB_NAME=$(grep 'rds_db_name' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/' || echo "pedigree_db")
+    RDS_USERNAME=$(grep 'rds_username' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/' || echo "postgres")
+    RDS_PASSWORD=$(grep 'rds_password' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/')
     DJANGO_SECRET=$(grep 'django_secret_key' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/')
-    SSH_KEY_PUB=$(grep 'ssh_public_key_path' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/' || echo "~/.ssh/id_rsa.pub")
-    SSH_KEY="${SSH_KEY_PUB%.pub}"
-    # Expand tilde
-    SSH_KEY="${SSH_KEY/#\~/$HOME}"
 
-    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i $SSH_KEY"
+    # Optional S3 media config
+    AWS_KEY=$(grep 'aws_access_key_id' "$TERRAFORM_DIR/terraform.tfvars" | grep -v '#' | sed 's/.*=\s*"\(.*\)"/\1/' || echo "")
+    AWS_SECRET=$(grep 'aws_secret_access_key' "$TERRAFORM_DIR/terraform.tfvars" | grep -v '#' | sed 's/.*=\s*"\(.*\)"/\1/' || echo "")
+    S3_BUCKET=$(grep 's3_media_bucket' "$TERRAFORM_DIR/terraform.tfvars" | grep -v '#' | sed 's/.*=\s*"\(.*\)"/\1/' || echo "")
+
+    SSH_KEY="$HOME/.ssh/p4td-key.pem"
+    SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i $SSH_KEY -o ControlMaster=auto -o ControlPath=/tmp/ssh_mux_%h_%p_%r -o ControlPersist=10m"
 }
 
 # ─── Deploy Application ──────────────────────────────────────
@@ -128,46 +121,41 @@ get_outputs() {
 deploy_app() {
     get_outputs
 
-    # Step 1: Build Flutter web with production API URL
-    log "Building Flutter web (API_BASE_URL=$API_URL)..."
-    cd "$PROJECT_ROOT"
-    flutter build web --release \
-        --dart-define="API_BASE_URL=$API_URL"
+    # Step 1: Create database on RDS if it doesn't exist
+    log "Ensuring database '$RDS_DB_NAME' exists on RDS..."
+    ssh $SSH_OPTS "ec2-user@$EC2_IP" "PGPASSWORD=\"$RDS_PASSWORD\" psql -h \"$RDS_ENDPOINT\" -U \"$RDS_USERNAME\" -d postgres -tc \"SELECT 1 FROM pg_database WHERE datname = '$RDS_DB_NAME'\" | grep -q 1 || PGPASSWORD=\"$RDS_PASSWORD\" psql -h \"$RDS_ENDPOINT\" -U \"$RDS_USERNAME\" -d postgres -c \"CREATE DATABASE $RDS_DB_NAME OWNER $RDS_USERNAME;\"" && \
+    log "Database '$RDS_DB_NAME' ready."
 
-    # Step 2: Upload frontend to S3
-    log "Uploading frontend to S3..."
-    aws s3 sync build/web "s3://$S3_BUCKET" \
-        --delete \
-        --cache-control "max-age=3600"
-
-    # Cache-bust index.html so users always get the latest version
-    aws s3 cp build/web/index.html "s3://$S3_BUCKET/index.html" \
-        --cache-control "no-cache, no-store, must-revalidate"
-
-    # Step 3: Invalidate CloudFront cache
-    log "Invalidating CloudFront cache..."
-    aws cloudfront create-invalidation \
-        --distribution-id "$CLOUDFRONT_ID" \
-        --paths "/*" > /dev/null
-
-    # Step 4: Create .env file on EC2
+    # Step 2: Create .env file on EC2
     log "Configuring environment on EC2..."
-    ssh $SSH_OPTS "ec2-user@$EC2_IP" bash -s << ENV_EOF
+
+    # Build S3 env vars only if configured
+    S3_ENV=""
+    if [ -n "$AWS_KEY" ] && [ -n "$S3_BUCKET" ]; then
+        S3_ENV="USE_S3=True
+AWS_ACCESS_KEY_ID=$AWS_KEY
+AWS_SECRET_ACCESS_KEY=$AWS_SECRET
+AWS_STORAGE_BUCKET_NAME=$S3_BUCKET
+AWS_S3_REGION_NAME=eu-west-1"
+    fi
+
+    ssh $SSH_OPTS "ec2-user@$EC2_IP" bash -s <<ENV_EOF
 cat > /opt/app/.env << 'DOTENV'
 DJANGO_SECRET_KEY=$DJANGO_SECRET
-DB_NAME=pedigree_db
-DB_USER=pedigree_admin
-DB_PASSWORD=$DB_PASSWORD
-DB_HOST=db
+DB_NAME=$RDS_DB_NAME
+DB_USER=$RDS_USERNAME
+DB_PASSWORD=$RDS_PASSWORD
+DB_HOST=$RDS_ENDPOINT
 DB_PORT=5432
 DEBUG=False
 ALLOWED_HOSTS=$EC2_IP,localhost
 CORS_ALLOW_ALL=False
-CORS_ALLOWED_ORIGINS=https://$CLOUDFRONT_DOMAIN
+CORS_ALLOWED_ORIGINS=http://$EC2_IP
+$S3_ENV
 DOTENV
 ENV_EOF
 
-    # Step 5: Sync backend code to EC2
+    # Step 3: Sync backend code to EC2
     log "Deploying backend to EC2..."
     rsync -az --delete \
         -e "ssh $SSH_OPTS" \
@@ -190,14 +178,14 @@ ENV_EOF
         "$PROJECT_ROOT/deploy/nginx/" \
         "ec2-user@$EC2_IP:/opt/app/deploy/nginx/"
 
-    # Step 6: Build and start containers on EC2
+    # Step 4: Build and start containers on EC2
     log "Starting application containers..."
     ssh $SSH_OPTS "ec2-user@$EC2_IP" << 'REMOTE'
 cd /opt/app
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d --build
 echo "Waiting for services to start..."
-sleep 10
+sleep 15
 docker compose -f docker-compose.prod.yml ps
 REMOTE
 
@@ -207,7 +195,6 @@ REMOTE
     log "  Deployment complete!"
     log "========================================="
     echo ""
-    echo -e "  Frontend:  ${GREEN}https://$CLOUDFRONT_DOMAIN${NC}"
     echo -e "  API:       ${GREEN}http://$EC2_IP/api/v1/${NC}"
     echo -e "  Admin:     ${GREEN}http://$EC2_IP/admin/${NC}"
     echo -e "  SSH:       ${BLUE}ssh -i $SSH_KEY ec2-user@$EC2_IP${NC}"
@@ -221,11 +208,12 @@ REMOTE
 
     # Cost summary
     echo -e "${BLUE}─── Estimated Monthly Cost ───${NC}"
-    echo "  EC2 t4g.small:    ~\$12.26"
-    echo "  EBS 20GB gp3:     ~ \$1.60"
-    echo "  S3 + CloudFront:  ~ \$0.10"
+    echo "  EC2 t2.micro:     Free (12 months)"
+    echo "  EBS 30GB gp3:     Free (12 months)"
+    echo "  RDS (existing):   Already running"
+    echo "  S3 (backups):     ~\$0.02"
     echo "  ─────────────────────────"
-    echo -e "  ${GREEN}Total:              ~\$14/month${NC}"
+    echo -e "  ${GREEN}Total:              ~\$0/month (free tier)${NC}"
     echo ""
 }
 

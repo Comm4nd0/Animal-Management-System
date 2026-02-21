@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import '../../models/models.dart';
 import '../../services/animal_provider.dart';
 import '../../utils/app_theme.dart';
+import '../../widgets/demo_write_guard.dart';
 
 class DocumentsTab extends StatelessWidget {
   final String animalId;
@@ -24,7 +25,10 @@ class DocumentsTab extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.all(8),
               child: ElevatedButton.icon(
-                onPressed: () => _addDocument(context, provider),
+                onPressed: () async {
+                  if (!await guardWriteAction(context)) return;
+                  _addDocument(context, provider);
+                },
                 icon: const Icon(Icons.attach_file),
                 label: const Text('Attach Document'),
               ),
@@ -68,8 +72,10 @@ class DocumentsTab extends StatelessWidget {
                             trailing: IconButton(
                               icon: const Icon(Icons.delete_outline,
                                   color: Colors.red),
-                              onPressed: () => _confirmDelete(
-                                  context, provider, doc),
+                              onPressed: () async {
+                                if (!await guardWriteAction(context)) return;
+                                _confirmDelete(context, provider, doc);
+                              },
                             ),
                           ),
                         );

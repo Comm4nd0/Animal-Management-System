@@ -9,14 +9,23 @@ echo "=== Starting EC2 bootstrap ==="
 # Update system
 dnf update -y
 
-# Install Docker
+# ─── Swap (1GB) ───────────────────────────────────────────────
+# t2.micro has only 1GB RAM; swap prevents OOM when running
+# Gunicorn + Nginx containers.
+fallocate -l 1G /swapfile
+chmod 600 /swapfile
+mkswap /swapfile
+swapon /swapfile
+echo "/swapfile swap swap defaults 0 0" >> /etc/fstab
+
+# ─── Docker ───────────────────────────────────────────────────
 dnf install -y docker
 systemctl enable docker
 systemctl start docker
 
-# Install Docker Compose v2 (ARM64)
+# Install Docker Compose v2 (x86_64)
 mkdir -p /usr/local/lib/docker/cli-plugins
-curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64" \
+curl -SL "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64" \
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
@@ -26,22 +35,30 @@ ln -sf /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-co
 # Add ec2-user to docker group
 usermod -aG docker ec2-user
 
-# Install git for deployments
-dnf install -y git
+# Install git, rsync, SSM agent and PostgreSQL client (for DB creation)
+dnf install -y git rsync amazon-ssm-agent postgresql16
 
-# Create app directory
+systemctl enable amazon-ssm-agent
+systemctl start amazon-ssm-agent
+
+# ─── App directory ────────────────────────────────────────────
 mkdir -p /opt/app/deploy/nginx
 chown -R ec2-user:ec2-user /opt/app
 
-# Set up daily database backup cron
+# ─── Daily database backup cron ──────────────────────────────
 cat > /etc/cron.daily/db-backup << 'CRON'
 #!/bin/bash
 BACKUP_FILE="/tmp/pedigree_db_$(date +%%Y%%m%%d_%%H%%M%%S).sql.gz"
 cd /opt/app
 
-# Dump database
-docker compose -f docker-compose.prod.yml exec -T db \
-  pg_dump -U ${db_user} pedigree_db | gzip > "$BACKUP_FILE"
+# Dump database via Docker
+docker compose -f docker-compose.prod.yml exec -T web \
+  python -c "
+import subprocess, os
+subprocess.run([
+    'pg_dump', '-h', os.environ['DB_HOST'],
+    '-U', os.environ['DB_USER'], '-d', os.environ['DB_NAME']
+], check=True)" | gzip > "$BACKUP_FILE"
 
 # Upload to S3
 aws s3 cp "$BACKUP_FILE" "s3://${backup_bucket}/$(date +%%Y/%%m)/" --quiet

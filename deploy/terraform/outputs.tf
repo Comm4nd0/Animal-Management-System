@@ -3,29 +3,9 @@ output "ec2_public_ip" {
   value       = aws_eip.app.public_ip
 }
 
-output "frontend_url" {
-  description = "CloudFront URL for the Flutter web frontend"
-  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
-}
-
 output "api_url" {
   description = "API base URL"
   value       = "http://${aws_eip.app.public_ip}/api/v1/"
-}
-
-output "cloudfront_distribution_id" {
-  description = "CloudFront distribution ID (for cache invalidation)"
-  value       = aws_cloudfront_distribution.frontend.id
-}
-
-output "cloudfront_domain_name" {
-  description = "CloudFront domain name"
-  value       = aws_cloudfront_distribution.frontend.domain_name
-}
-
-output "frontend_bucket_name" {
-  description = "S3 bucket name for frontend files"
-  value       = aws_s3_bucket.frontend.id
 }
 
 output "backup_bucket_name" {
@@ -35,14 +15,18 @@ output "backup_bucket_name" {
 
 output "ssh_command" {
   description = "SSH command to connect to the EC2 instance"
-  value       = "ssh -i ${replace(var.ssh_public_key_path, ".pub", "")} ec2-user@${aws_eip.app.public_ip}"
+  value       = "ssh -i ~/.ssh/p4td-key.pem ec2-user@${aws_eip.app.public_ip}"
+}
+
+output "admin_url" {
+  description = "Django admin URL"
+  value       = "http://${aws_eip.app.public_ip}/admin/"
 }
 
 # ─── Cost Estimate ────────────────────────────────────────────
-# EC2 t4g.small (on-demand):   ~$12.26/month
-# EBS 20GB gp3:                ~$1.60/month
-# Elastic IP:                  $0 (attached)
-# S3 (frontend + backups):     ~$0.10/month
-# CloudFront (free tier):      $0/month (first 1TB)
+# EC2 t2.micro (free tier):    $0/month (first 12 months)
+# EBS 30GB gp3 (free tier):    $0/month (first 12 months)
+# Elastic IP:                  $0 (attached to running instance)
+# S3 (backups):                ~$0.02/month
 # ──────────────────────────────────────────────────────────────
-# Estimated total:             ~$14/month
+# Estimated total:             ~$0/month (free tier)

@@ -21,9 +21,7 @@ DOMAIN="$1"
 
 cd "$TERRAFORM_DIR"
 EC2_IP=$(terraform output -raw ec2_public_ip 2>/dev/null) || { echo -e "${RED}Run deploy.sh --infra first${NC}"; exit 1; }
-SSH_KEY_PUB=$(grep 'ssh_public_key_path' "$TERRAFORM_DIR/terraform.tfvars" | sed 's/.*=\s*"\(.*\)"/\1/' || echo "~/.ssh/id_rsa.pub")
-SSH_KEY="${SSH_KEY_PUB%.pub}"
-SSH_KEY="${SSH_KEY/#\~/$HOME}"
+SSH_KEY="$HOME/.ssh/p4td-key.pem"
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -i $SSH_KEY"
 
 echo -e "${GREEN}[SSL]${NC} Setting up Let's Encrypt certificate for $DOMAIN"
