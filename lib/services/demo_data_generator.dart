@@ -2,7 +2,7 @@ import 'dart:math';
 import '../models/models.dart';
 import 'database_service.dart';
 
-/// Generates ~200 demo animals directly into local SQLite when the
+/// Generates ~1,000 demo animals directly into local SQLite when the
 /// backend API is unreachable. Uses a deterministic seed so the demo
 /// data is consistent across sessions.
 class DemoDataGenerator {
@@ -20,21 +20,39 @@ class DemoDataGenerator {
     final speciesConfigs = [
       _SpeciesConfig(
         species: 'Horse',
-        breeds: ['Thoroughbred', 'Arabian', 'Quarter Horse', 'Warmblood'],
-        count: 80,
+        breeds: ['Thoroughbred', 'Arabian', 'Quarter Horse', 'Warmblood', 'Friesian'],
+        count: 300,
         namePatterns: _horseNames,
       ),
       _SpeciesConfig(
         species: 'Cattle',
-        breeds: ['Angus', 'Hereford', 'Charolais', 'Holstein'],
-        count: 70,
+        breeds: ['Angus', 'Hereford', 'Charolais', 'Holstein', 'Simmental'],
+        count: 250,
         namePatterns: _cattleNames,
       ),
       _SpeciesConfig(
         species: 'Sheep',
         breeds: ['Suffolk', 'Merino', 'Dorper', 'Texel'],
-        count: 50,
+        count: 180,
         namePatterns: _sheepNames,
+      ),
+      _SpeciesConfig(
+        species: 'Goat',
+        breeds: ['Boer', 'Nubian', 'Alpine', 'Saanen'],
+        count: 120,
+        namePatterns: _goatNames,
+      ),
+      _SpeciesConfig(
+        species: 'Pig',
+        breeds: ['Large White', 'Landrace', 'Duroc', 'Berkshire'],
+        count: 100,
+        namePatterns: _pigNames,
+      ),
+      _SpeciesConfig(
+        species: 'Alpaca',
+        breeds: ['Huacaya', 'Suri'],
+        count: 50,
+        namePatterns: _alpacaNames,
       ),
     ];
 
@@ -305,6 +323,9 @@ class DemoDataGenerator {
       'Horse': ['Bay', 'Chestnut', 'Black', 'Grey', 'Palomino', 'Dun', 'Roan'],
       'Cattle': ['Black', 'Red', 'White', 'Roan', 'Brindle', 'Brown', 'Spotted'],
       'Sheep': ['White', 'Black', 'Brown', 'Grey', 'Spotted'],
+      'Goat': ['White', 'Black', 'Brown', 'Red', 'Spotted', 'Tan', 'Grey'],
+      'Pig': ['White', 'Black', 'Red', 'Spotted', 'Sandy', 'Belted'],
+      'Alpaca': ['White', 'Fawn', 'Brown', 'Black', 'Grey', 'Rose Grey'],
     };
     final list = colors[species] ?? ['Unknown'];
     return list[_rng.nextInt(list.length)];
@@ -368,6 +389,51 @@ class DemoDataGenerator {
     'Faith', 'Grace', 'Hope', 'Iris',
     'Joy', 'Kate', 'Lily', 'May',
     'Nell', 'Opal', 'Quinn', 'Rose',
+  ];
+
+  static const _goatNames = [
+    'Pepper', 'Nutmeg', 'Cocoa', 'Ginger',
+    'Basil', 'Cinnamon', 'Clover', 'Biscuit',
+    'Maple', 'Olive', 'Hazel', 'Sage',
+    'Rosie', 'Ivy', 'Holly', 'Daisy',
+    'Poppy', 'Jasmine', 'Pearl', 'Ruby',
+    'Fern', 'Bramble', 'Thyme', 'Mint',
+    'Star', 'Moon', 'Sunny', 'Storm',
+    'Scout', 'Buck', 'Billy', 'Nanny',
+    'Cricket', 'Pebble', 'Shadow', 'Ember',
+    'Willow', 'Birch', 'Acorn', 'Chestnut',
+    'Truffle', 'Mocha', 'Toffee', 'Honey',
+    'Velvet', 'Sable', 'Tinker', 'Dash',
+  ];
+
+  static const _pigNames = [
+    'Hamlet', 'Truffle', 'Wilbur', 'Babe',
+    'Piglet', 'Waddles', 'Rosie', 'Petunia',
+    'Buttercup', 'Penelope', 'Ginger', 'Pepper',
+    'Daisy', 'Poppy', 'Clover', 'Biscuit',
+    'Nutmeg', 'Cocoa', 'Maple', 'Olive',
+    'Hazel', 'Sage', 'Pearl', 'Ruby',
+    'Ember', 'Storm', 'Shadow', 'Scout',
+    'Buck', 'Tank', 'Bruno', 'Rex',
+    'Duke', 'King', 'Prince', 'Boss',
+    'Chief', 'Major', 'Captain', 'Ace',
+    'Rusty', 'Copper', 'Jasper', 'Onyx',
+    'Flint', 'Slate', 'Stone', 'Clay',
+  ];
+
+  static const _alpacaNames = [
+    'Snowflake', 'Cloud', 'Misty', 'Fleece',
+    'Cotton', 'Velvet', 'Silk', 'Cashmere',
+    'Marshmallow', 'Powder', 'Frost', 'Winter',
+    'Alpine', 'Sierra', 'Andes', 'Summit',
+    'Luna', 'Star', 'Aurora', 'Dawn',
+    'Meadow', 'Clover', 'Fern', 'Willow',
+    'Sage', 'Maple', 'Birch', 'Cedar',
+    'Pearl', 'Opal', 'Crystal', 'Amber',
+    'Cocoa', 'Mocha', 'Toffee', 'Caramel',
+    'Cinnamon', 'Nutmeg', 'Ginger', 'Honey',
+    'Bramble', 'Thistle', 'Heather', 'Holly',
+    'Ivy', 'Rosie', 'Daisy', 'Poppy',
   ];
 
   static const _vets = [

@@ -46,6 +46,35 @@ class ApiService {
     throw ApiException(response.statusCode, response.body);
   }
 
+  /// Fetches all pages from a paginated DRF endpoint.
+  /// Returns the combined list of raw JSON objects from all pages.
+  Future<List<dynamic>> _getAllPaginated(String path, {Map<String, String>? queryParams}) async {
+    final allResults = <dynamic>[];
+    String currentPath = path;
+    Map<String, String>? currentParams = queryParams;
+
+    while (true) {
+      final data = await _get(currentPath, queryParams: currentParams);
+
+      if (data is List) {
+        allResults.addAll(data);
+        break;
+      }
+
+      final results = data['results'] as List? ?? [];
+      allResults.addAll(results);
+
+      final nextUrl = data['next'] as String?;
+      if (nextUrl == null || nextUrl.isEmpty) break;
+
+      final nextUri = Uri.parse(nextUrl);
+      currentPath = nextUri.path.replaceFirst(RegExp(r'^.*?/api/v1'), '/api/v1').replaceFirst('/api/v1', '');
+      currentParams = Map<String, String>.from(nextUri.queryParameters);
+    }
+
+    return allResults;
+  }
+
   Future<dynamic> _post(String path, Map<String, dynamic> data) async {
     final uri = Uri.parse('$baseUrl$path');
     final response =
@@ -86,9 +115,9 @@ class ApiService {
     if (breed != null) params['breed'] = breed;
     if (search != null) params['search'] = search;
 
-    final data = await _get('/animals/', queryParams: params.isEmpty ? null : params);
-    final results = data['results'] as List? ?? data as List;
-    return results.map((m) => _animalFromApi(m)).toList();
+    final results = await _getAllPaginated('/animals/',
+        queryParams: params.isEmpty ? null : params);
+    return results.map((m) => _animalFromApi(m as Map<String, dynamic>)).toList();
   }
 
   Future<Animal> getAnimal(String id) async {
@@ -179,8 +208,7 @@ class ApiService {
   // ─── Breeding Records ────────────────────────────────────────
 
   Future<List<BreedingRecord>> getBreedingRecords() async {
-    final data = await _get('/breeding-records/');
-    final results = data['results'] as List? ?? data as List;
+    final results = await _getAllPaginated('/breeding-records/');
     return results.map((m) => _breedingRecordFromApi(m)).toList();
   }
 
@@ -198,8 +226,7 @@ class ApiService {
   // ─── Litters ──────────────────────────────────────────────────
 
   Future<List<Litter>> getLitters() async {
-    final data = await _get('/litters/');
-    final results = data['results'] as List? ?? data as List;
+    final results = await _getAllPaginated('/litters/');
     return results.map((m) => _litterFromApi(m)).toList();
   }
 
@@ -235,8 +262,7 @@ class ApiService {
   // ─── Contacts ───────────────────────────────────────────────
 
   Future<List<Contact>> getContacts() async {
-    final data = await _get('/contacts/');
-    final results = data['results'] as List? ?? data as List;
+    final results = await _getAllPaginated('/contacts/');
     return results
         .map((m) => Contact.fromApi(m as Map<String, dynamic>))
         .toList();
@@ -259,8 +285,7 @@ class ApiService {
   // ─── Custom Field Definitions ────────────────────────────────
 
   Future<List<CustomFieldDefinition>> getCustomFieldDefinitions() async {
-    final data = await _get('/custom-fields/');
-    final results = data['results'] as List? ?? data as List;
+    final results = await _getAllPaginated('/custom-fields/');
     return results
         .map((m) => CustomFieldDefinition.fromApi(m as Map<String, dynamic>))
         .toList();

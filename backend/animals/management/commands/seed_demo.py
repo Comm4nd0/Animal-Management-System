@@ -2,11 +2,11 @@
 Generate realistic demo data for the Pedigree Animal Management System.
 
 Usage:
-    python manage.py seed_demo          # Seed ~2,500 animals
+    python manage.py seed_demo          # Seed ~1,000 animals
     python manage.py seed_demo --clear  # Delete existing demo data first
 
 Creates a dedicated ``demo_user`` account (Enterprise tier, READ_ONLY role)
-with thousands of animals spanning multiple species, multi-generation pedigree
+with ~1,000 animals spanning multiple species, multi-generation pedigree
 trees, health records, breeding records, litters, contacts, and custom fields.
 """
 
@@ -102,7 +102,7 @@ SPECIES_CONFIG = [
     {
         'species': 'Horse',
         'breeds': ['Thoroughbred', 'Arabian', 'Quarter Horse', 'Warmblood', 'Friesian'],
-        'total': 800,
+        'total': 300,
         'name_pool': HORSE_NAMES,
         'use_prefix': True,
         'weight_range': (400, 650),
@@ -112,7 +112,7 @@ SPECIES_CONFIG = [
     {
         'species': 'Cattle',
         'breeds': ['Angus', 'Hereford', 'Charolais', 'Holstein', 'Simmental'],
-        'total': 600,
+        'total': 250,
         'name_pool': CATTLE_NAMES,
         'use_prefix': True,
         'weight_range': (350, 900),
@@ -122,7 +122,7 @@ SPECIES_CONFIG = [
     {
         'species': 'Sheep',
         'breeds': ['Suffolk', 'Merino', 'Dorper', 'Texel'],
-        'total': 400,
+        'total': 180,
         'name_pool': SHEEP_GOAT_NAMES,
         'use_prefix': False,
         'weight_range': (40, 120),
@@ -132,7 +132,7 @@ SPECIES_CONFIG = [
     {
         'species': 'Goat',
         'breeds': ['Boer', 'Nubian', 'Alpine', 'Saanen'],
-        'total': 300,
+        'total': 120,
         'name_pool': SHEEP_GOAT_NAMES,
         'use_prefix': False,
         'weight_range': (30, 100),
@@ -142,7 +142,7 @@ SPECIES_CONFIG = [
     {
         'species': 'Pig',
         'breeds': ['Large White', 'Landrace', 'Duroc', 'Berkshire'],
-        'total': 200,
+        'total': 100,
         'name_pool': PIG_NAMES,
         'use_prefix': False,
         'weight_range': (60, 300),
@@ -152,7 +152,7 @@ SPECIES_CONFIG = [
     {
         'species': 'Alpaca',
         'breeds': ['Huacaya', 'Suri'],
-        'total': 100,
+        'total': 50,
         'name_pool': SHEEP_GOAT_NAMES,
         'use_prefix': True,
         'weight_range': (50, 85),
@@ -172,7 +172,7 @@ COLORS = {
 
 
 class Command(BaseCommand):
-    help = 'Generate realistic demo data with ~2,500 animals and related records.'
+    help = 'Generate realistic demo data with ~1,000 animals and related records.'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
