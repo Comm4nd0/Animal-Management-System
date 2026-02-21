@@ -54,17 +54,61 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
 
     final provider = context.read<AnimalProvider>();
 
+    PedigreeNode? tree;
+
     if (kIsWeb || provider.isDemoMode) {
       await _loadPedigreeViaBackgroundTask();
+      tree = _pedigreeTree;
     } else {
-      final tree = await provider.buildPedigreeTree(widget.animalId);
-      if (mounted) {
-        setState(() {
-          _pedigreeTree = tree;
-          _pedigreeLoading = false;
-        });
+      tree = await provider.buildPedigreeTree(widget.animalId);
+    }
+
+    // Fallback: build the tree from the in-memory animal list when the
+    // primary method (SQLite query or background task) returns nothing.
+    tree ??= _buildTreeFromMemory(provider, widget.animalId, 0);
+
+    if (mounted) {
+      setState(() {
+        _pedigreeTree = tree;
+        _pedigreeLoading = false;
+      });
+    }
+  }
+
+  /// Builds a pedigree tree by walking sire/dam references using the
+  /// provider's in-memory animal list.  This works on every platform and
+  /// does not depend on SQLite or a running backend.
+  PedigreeNode? _buildTreeFromMemory(
+    AnimalProvider provider,
+    String animalId,
+    int generation, {
+    int maxGenerations = 4,
+  }) {
+    final animal = provider.getAnimalById(animalId);
+    if (animal == null) return null;
+
+    PedigreeNode? sireNode;
+    PedigreeNode? damNode;
+
+    if (generation < maxGenerations) {
+      if (animal.sireId != null) {
+        sireNode = _buildTreeFromMemory(
+            provider, animal.sireId!, generation + 1,
+            maxGenerations: maxGenerations);
+      }
+      if (animal.damId != null) {
+        damNode = _buildTreeFromMemory(
+            provider, animal.damId!, generation + 1,
+            maxGenerations: maxGenerations);
       }
     }
+
+    return PedigreeNode(
+      animal: animal,
+      sire: sireNode,
+      dam: damNode,
+      generation: generation,
+    );
   }
 
   Future<void> _loadPedigreeViaBackgroundTask() async {
