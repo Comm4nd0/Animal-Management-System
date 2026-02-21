@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
+import '../../services/demo_service.dart';
 import '../../utils/app_theme.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -69,6 +70,19 @@ class SettingsScreen extends StatelessWidget {
               );
             },
           ),
+          Consumer<AnimalProvider>(
+            builder: (context, provider, _) {
+              if (!provider.isDemoMode) return const SizedBox.shrink();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(),
+                  _SectionHeader('Demo'),
+                  _ResetDemoTile(),
+                ],
+              );
+            },
+          ),
           const Divider(),
           _SectionHeader('About'),
           const ListTile(
@@ -97,6 +111,79 @@ class _SectionHeader extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
       ),
+    );
+  }
+}
+
+class _ResetDemoTile extends StatefulWidget {
+  @override
+  State<_ResetDemoTile> createState() => _ResetDemoTileState();
+}
+
+class _ResetDemoTileState extends State<_ResetDemoTile> {
+  bool _isResetting = false;
+
+  Future<void> _resetDemoData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Reset Demo Data'),
+        content: const Text(
+          'This will discard all changes and restore the demo data '
+          'back to its original state. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isResetting = true);
+
+    final provider = context.read<AnimalProvider>();
+    final demoService = DemoService();
+    final success = await demoService.resetDemoData(provider);
+
+    if (!mounted) return;
+    setState(() => _isResetting = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          success
+              ? 'Demo data has been reset successfully.'
+              : 'Failed to reset demo data. Please try again.',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: _isResetting
+          ? const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.restore, color: Colors.orange),
+      title: const Text('Reset Demo Data'),
+      subtitle: const Text('Restore all data to its original state'),
+      enabled: !_isResetting,
+      onTap: _isResetting ? null : _resetDemoData,
     );
   }
 }

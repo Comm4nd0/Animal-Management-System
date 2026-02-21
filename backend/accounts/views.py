@@ -72,15 +72,51 @@ class AccountViewSet(viewsets.ViewSet):
             profile = UserProfile.objects.create(
                 user=user,
                 service_tier=ServiceTier.ENTERPRISE,
-                role=UserRole.READ_ONLY,
+                role=UserRole.OWNER,
                 farm_name='Pedigree Manager Demo Farm',
             )
+
+        # Ensure demo user always has full access
+        if profile.role != UserRole.OWNER:
+            profile.role = UserRole.OWNER
+            profile.save(update_fields=['role'])
 
         return Response({
             'token': token.key,
             'user': UserProfileSerializer(profile).data,
             'is_demo': True,
         })
+
+    @action(detail=False, methods=['post'], url_path='demo-reset')
+    def demo_reset(self, request):
+        """
+        Reset demo data back to a known good state.
+
+        Only works for the demo_user account. Clears all existing demo
+        data and re-runs the seed_demo management command.
+        """
+        if not request.user.is_authenticated:
+            return Response(
+                {'error': 'Authentication required'},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        if request.user.username != 'demo_user':
+            return Response(
+                {'error': 'This action is only available for demo accounts.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        from django.core.management import call_command
+        try:
+            call_command('seed_demo', '--clear')
+            return Response({'message': 'Demo data has been reset successfully.'})
+        except Exception as e:
+            logger.exception('Demo reset failed')
+            return Response(
+                {'error': f'Reset failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request):

@@ -231,10 +231,17 @@ class ApiService {
     return Map<String, dynamic>.from(data);
   }
 
-  /// Log in as the demo user (read-only, no credentials needed).
+  /// Log in as the demo user (no credentials needed).
   /// Returns {token, user, is_demo: true} or throws.
   Future<Map<String, dynamic>> demoLogin() async {
     final data = await _post('/accounts/demo-login/', {});
+    return Map<String, dynamic>.from(data);
+  }
+
+  /// Reset demo data back to a known good state.
+  /// Only works for the demo_user account.
+  Future<Map<String, dynamic>> resetDemoData() async {
+    final data = await _post('/accounts/demo-reset/', {});
     return Map<String, dynamic>.from(data);
   }
 
