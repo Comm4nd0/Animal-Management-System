@@ -327,23 +327,23 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                 const SizedBox(height: 24),
                 _buildSectionTitle('Breeder & Owner'),
                 const SizedBox(height: 8),
-                _buildContactDropdown(
+                _buildContactAutocomplete(
                   label: 'Breeder',
                   icon: Icons.person,
-                  value: _selectedBreederId,
+                  selectedId: _selectedBreederId,
                   contacts: provider.contacts,
-                  onChanged: (v) => setState(() => _selectedBreederId = v),
+                  onSelected: (id) => setState(() => _selectedBreederId = id),
                   onAddNew: () => _showAddContactDialog(
                     onCreated: (c) => setState(() => _selectedBreederId = c.id),
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildContactDropdown(
+                _buildContactAutocomplete(
                   label: 'Current Owner',
                   icon: Icons.home,
-                  value: _selectedOwnerId,
+                  selectedId: _selectedOwnerId,
                   contacts: provider.contacts,
-                  onChanged: (v) => setState(() => _selectedOwnerId = v),
+                  onSelected: (id) => setState(() => _selectedOwnerId = id),
                   onAddNew: () => _showAddContactDialog(
                     onCreated: (c) => setState(() => _selectedOwnerId = c.id),
                   ),
@@ -806,40 +806,140 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     );
   }
 
-  Widget _buildContactDropdown({
+  /// Formats a contact for display in the autocomplete field.
+  String _formatContactDisplay(Contact c) {
+    return c.displayName;
+  }
+
+  /// Builds a typeahead autocomplete field for selecting a contact (breeder/owner).
+  /// Users can search by name or farm name.
+  Widget _buildContactAutocomplete({
     required String label,
     required IconData icon,
-    required String? value,
+    required String? selectedId,
     required List<Contact> contacts,
-    required ValueChanged<String?> onChanged,
+    required ValueChanged<String?> onSelected,
     required VoidCallback onAddNew,
   }) {
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonFormField<String>(
-            value: contacts.any((c) => c.id == value) ? value : null,
-            decoration: InputDecoration(
-              labelText: label,
-              prefixIcon: Icon(icon),
+    final selectedContact = selectedId != null
+        ? contacts.cast<Contact?>().firstWhere(
+              (c) => c!.id == selectedId,
+              orElse: () => null,
+            )
+        : null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Autocomplete<Contact>(
+                displayStringForOption: _formatContactDisplay,
+                initialValue: selectedContact != null
+                    ? TextEditingValue(
+                        text: _formatContactDisplay(selectedContact))
+                    : TextEditingValue.empty,
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return contacts;
+                  }
+                  final query = textEditingValue.text.toLowerCase();
+                  return contacts.where((contact) {
+                    return contact.name.toLowerCase().contains(query) ||
+                        contact.farmName.toLowerCase().contains(query);
+                  });
+                },
+                onSelected: (Contact contact) {
+                  onSelected(contact.id);
+                },
+                fieldViewBuilder: (context, textController, focusNode,
+                    onFieldSubmitted) {
+                  return TextFormField(
+                    controller: textController,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: label,
+                      prefixIcon: Icon(icon),
+                      hintText: 'Type name or farm to search...',
+                      suffixIcon: selectedId != null
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              tooltip: 'Clear selection',
+                              onPressed: () {
+                                textController.clear();
+                                onSelected(null);
+                              },
+                            )
+                          : null,
+                    ),
+                    onChanged: (value) {
+                      if (value.isEmpty && selectedId != null) {
+                        onSelected(null);
+                      }
+                    },
+                  );
+                },
+                optionsViewBuilder: (context, onAutoSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 240,
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final contact = options.elementAt(index);
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(
+                                icon,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              title: Text(
+                                contact.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: contact.farmName.isNotEmpty
+                                  ? Text(
+                                      contact.farmName,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    )
+                                  : null,
+                              onTap: () => onAutoSelected(contact),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('Not set')),
-              ...contacts.map((c) => DropdownMenuItem(
-                    value: c.id,
-                    child: Text(c.displayName),
-                  )),
-            ],
-            onChanged: onChanged,
-          ),
-        ),
-        const SizedBox(width: 4),
-        IconButton(
-          icon: const Icon(Icons.person_add),
-          tooltip: 'Add new contact',
-          onPressed: onAddNew,
-        ),
-      ],
+            const SizedBox(width: 4),
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: IconButton(
+                icon: const Icon(Icons.person_add),
+                tooltip: 'Add new contact',
+                onPressed: onAddNew,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
