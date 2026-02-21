@@ -66,16 +66,30 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     super.initState();
     _sireFocusNode.addListener(() {
       final hasFocus = _sireFocusNode.hasFocus;
-      setState(() => _sireShowSuggestions = hasFocus);
-      if (hasFocus && _selectedSireId == null) {
-        _searchParentCandidates(isSire: true);
+      if (hasFocus) {
+        setState(() => _sireShowSuggestions = true);
+        if (_selectedSireId == null) {
+          _searchParentCandidates(isSire: true);
+        }
+      } else {
+        // Delay hiding so a tap on a suggestion can register before removal
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _sireShowSuggestions = false);
+        });
       }
     });
     _damFocusNode.addListener(() {
       final hasFocus = _damFocusNode.hasFocus;
-      setState(() => _damShowSuggestions = hasFocus);
-      if (hasFocus && _selectedDamId == null) {
-        _searchParentCandidates(isSire: false);
+      if (hasFocus) {
+        setState(() => _damShowSuggestions = true);
+        if (_selectedDamId == null) {
+          _searchParentCandidates(isSire: false);
+        }
+      } else {
+        // Delay hiding so a tap on a suggestion can register before removal
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _damShowSuggestions = false);
+        });
       }
     });
     _sireSearchController.addListener(() {
