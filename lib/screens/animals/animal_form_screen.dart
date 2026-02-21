@@ -454,11 +454,21 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     _sireShowSuggestions = false;
                     _sireFocusNode.unfocus();
                   }),
-                  onCleared: () => setState(() {
-                    _selectedSireId = null;
-                    _sireSearchController.clear();
-                    _sireSuggestions = [];
-                  }),
+                  onCleared: () {
+                    if (_selectedSireId == null) return;
+                    setState(() {
+                      _selectedSireId = null;
+                      _sireSearchController.clear();
+                      _sireSuggestions = [];
+                    });
+                  },
+                  onSelectionInvalidated: () {
+                    setState(() {
+                      _selectedSireId = null;
+                      _sireShowSuggestions = true;
+                    });
+                    _searchParentCandidates(isSire: true);
+                  },
                 ),
                 const SizedBox(height: 12),
                 _buildParentTypeahead(
@@ -477,11 +487,21 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     _damShowSuggestions = false;
                     _damFocusNode.unfocus();
                   }),
-                  onCleared: () => setState(() {
-                    _selectedDamId = null;
-                    _damSearchController.clear();
-                    _damSuggestions = [];
-                  }),
+                  onCleared: () {
+                    if (_selectedDamId == null) return;
+                    setState(() {
+                      _selectedDamId = null;
+                      _damSearchController.clear();
+                      _damSuggestions = [];
+                    });
+                  },
+                  onSelectionInvalidated: () {
+                    setState(() {
+                      _selectedDamId = null;
+                      _damShowSuggestions = true;
+                    });
+                    _searchParentCandidates(isSire: false);
+                  },
                 ),
 
                 const SizedBox(height: 24),
@@ -974,6 +994,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     required bool showSuggestions,
     required ValueChanged<Animal> onSelected,
     required VoidCallback onCleared,
+    required VoidCallback onSelectionInvalidated,
   }) {
     final shouldShow = showSuggestions && selectedId == null;
 
@@ -1005,8 +1026,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     : null,
           ),
           onChanged: (value) {
-            if (value.isEmpty && selectedId != null) {
-              onCleared();
+            if (selectedId != null) {
+              // User modified text while a parent was selected — invalidate
+              // the selection so search mode activates with the typed text.
+              onSelectionInvalidated();
             }
           },
         ),
