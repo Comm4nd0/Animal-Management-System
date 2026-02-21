@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/animal_provider.dart';
+import '../../services/background_task_service.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/demo_write_guard.dart';
@@ -24,11 +26,13 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _fetchingAnimal = false;
+  PedigreeNode? _pedigreeTree;
+  bool _pedigreeLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 9, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<AnimalProvider>();
       // If the animal isn't in the local cache, fetch it from the API.
@@ -41,7 +45,83 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       p.loadShowResults(widget.animalId);
       p.loadFinancialRecords(widget.animalId);
       p.loadDocumentAttachments(widget.animalId);
+      _loadPedigreeTree();
     });
+  }
+
+  Future<void> _loadPedigreeTree() async {
+    setState(() => _pedigreeLoading = true);
+
+    final provider = context.read<AnimalProvider>();
+
+    if (kIsWeb || provider.isDemoMode) {
+      await _loadPedigreeViaBackgroundTask();
+    } else {
+      final tree = await provider.buildPedigreeTree(widget.animalId);
+      if (mounted) {
+        setState(() {
+          _pedigreeTree = tree;
+          _pedigreeLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadPedigreeViaBackgroundTask() async {
+    final taskService = BackgroundTaskService();
+    final result = await taskService.computePedigreeTree(
+      widget.animalId,
+      generations: 4,
+      onProgress: (_) {},
+    );
+
+    if (!mounted) return;
+
+    if (result != null && !result.isFailed && result.result != null) {
+      final tree = _parsePedigreeResult(result.result!);
+      setState(() {
+        _pedigreeTree = tree;
+        _pedigreeLoading = false;
+      });
+    } else {
+      setState(() => _pedigreeLoading = false);
+    }
+  }
+
+  PedigreeNode? _parsePedigreeResult(Map<String, dynamic> data) {
+    final animalData = data['animal'] as Map<String, dynamic>?;
+    if (animalData == null) return null;
+
+    return PedigreeNode(
+      animal: _animalFromApiData(animalData),
+      sire: data['sire'] != null
+          ? _parsePedigreeResult(
+              Map<String, dynamic>.from(data['sire'] as Map))
+          : null,
+      dam: data['dam'] != null
+          ? _parsePedigreeResult(
+              Map<String, dynamic>.from(data['dam'] as Map))
+          : null,
+      generation: data['generation'] as int? ?? 0,
+    );
+  }
+
+  Animal _animalFromApiData(Map<String, dynamic> m) {
+    return Animal(
+      id: m['id'] as String? ?? '',
+      name: m['name'] as String? ?? 'Unknown',
+      species: m['species'] as String? ?? '',
+      breed: m['breed'] as String? ?? '',
+      sex: Sex.values[(m['sex'] as int?) ?? 0],
+      dateOfBirth: m['date_of_birth'] != null
+          ? DateTime.tryParse(m['date_of_birth'] as String)
+          : null,
+      color: m['color'] as String?,
+      registrationNumber: m['registration_number'] as String?,
+      status: AnimalStatus.values[(m['status'] as int?) ?? 0],
+      geneticTraits: {},
+      customFields: {},
+    );
   }
 
   Future<void> _fetchFromApi(AnimalProvider provider) async {
@@ -144,7 +224,6 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                   Tab(text: 'Shows'),
                   Tab(text: 'Finances'),
                   Tab(text: 'Docs'),
-                  Tab(text: 'Lineage'),
                   Tab(text: 'Notes'),
                 ],
               ),
@@ -159,7 +238,6 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                     ShowResultsTab(animalId: widget.animalId),
                     FinancialRecordsTab(animalId: widget.animalId),
                     DocumentsTab(animalId: widget.animalId),
-                    _buildLineageTab(context, animal, sire, dam, provider),
                     _buildNotesTab(context, animal),
                   ],
                 ),
@@ -302,7 +380,231 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
               return _buildInfoRow(displayName, displayValue);
             }),
           ]),
+        // Parents section
+        Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Parents',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleMedium
+                      ?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                _buildParentRow(context, 'Sire (Father)', sire),
+                const SizedBox(height: 4),
+                _buildParentRow(context, 'Dam (Mother)', dam),
+              ],
+            ),
+          ),
+        ),
+        // Family Tree section (4 generations deep)
+        _buildFamilyTreeSection(context, animal),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: () =>
+              Navigator.pushNamed(context, '/pedigree/${animal.id}'),
+          icon: const Icon(Icons.account_tree),
+          label: const Text('View Full Pedigree Tree'),
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          onPressed: () => Navigator.pushNamed(
+            context,
+            '/breeding/${animal.id}',
+          ),
+          icon: const Icon(Icons.favorite),
+          label: const Text('Get Breeding Suggestions'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.femaleColor,
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildFamilyTreeSection(BuildContext context, Animal animal) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Family Tree',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (_pedigreeLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 8),
+                      Text('Loading family tree...'),
+                    ],
+                  ),
+                ),
+              )
+            else if (_pedigreeTree == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'No family tree data available',
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                ),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _buildPedigreeTree(_pedigreeTree!, 0),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPedigreeTree(PedigreeNode node, int generation) {
+    const maxGenerations = 4;
+    if (generation >= maxGenerations) {
+      return _buildTreeAnimalCard(node.animal, generation);
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _buildTreeAnimalCard(node.animal, generation),
+        if (node.sire != null || node.dam != null) ...[
+          Container(
+            width: 20,
+            height: 2,
+            color: Colors.grey.shade400,
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (node.sire != null) ...[
+                _buildPedigreeTree(node.sire!, generation + 1),
+                const SizedBox(height: 6),
+              ] else ...[
+                _buildUnknownTreeCard('Unknown Sire', generation + 1),
+                const SizedBox(height: 6),
+              ],
+              if (node.dam != null)
+                _buildPedigreeTree(node.dam!, generation + 1)
+              else
+                _buildUnknownTreeCard('Unknown Dam', generation + 1),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTreeAnimalCard(Animal animal, int generation) {
+    final isMale = animal.sex == Sex.male;
+    final color = isMale ? AppTheme.maleColor : AppTheme.femaleColor;
+    final maxWidth = 140.0 - (generation * 10).clamp(0, 30).toDouble();
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(context, '/pedigree/${animal.id}');
+      },
+      child: Container(
+        width: maxWidth,
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          border: Border.all(
+            color: color,
+            width: generation == 0 ? 2 : 1,
+          ),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  isMale ? Icons.male : Icons.female,
+                  size: 14,
+                  color: color,
+                ),
+                const SizedBox(width: 3),
+                Expanded(
+                  child: Text(
+                    animal.name,
+                    style: TextStyle(
+                      fontWeight: generation == 0
+                          ? FontWeight.bold
+                          : FontWeight.w500,
+                      fontSize: generation == 0 ? 12 : 11,
+                      color: AppTheme.primaryColor,
+                      decoration: TextDecoration.underline,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            if (animal.breed.isNotEmpty)
+              Text(
+                animal.breed,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: Colors.grey.shade600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (animal.registrationNumber != null)
+              Text(
+                animal.registrationNumber!,
+                style: TextStyle(
+                  fontSize: 8,
+                  color: Colors.grey.shade500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnknownTreeCard(String label, int generation) {
+    final maxWidth = 140.0 - (generation * 10).clamp(0, 30).toDouble();
+    return Container(
+      width: maxWidth,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          color: Colors.grey.shade500,
+          fontStyle: FontStyle.italic,
+        ),
+      ),
     );
   }
 
@@ -374,60 +676,6 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                 ),
               );
             },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLineageTab(
-    BuildContext context,
-    Animal animal,
-    Animal? sire,
-    Animal? dam,
-    AnimalProvider provider,
-  ) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Parents',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                _buildParentRow(context, 'Sire (Father)', sire),
-                const SizedBox(height: 4),
-                _buildParentRow(context, 'Dam (Mother)', dam),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        ElevatedButton.icon(
-          onPressed: () =>
-              Navigator.pushNamed(context, '/pedigree/${animal.id}'),
-          icon: const Icon(Icons.account_tree),
-          label: const Text('View Full Pedigree Tree'),
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(
-            context,
-            '/breeding/${animal.id}',
-          ),
-          icon: const Icon(Icons.favorite),
-          label: const Text('Get Breeding Suggestions'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.femaleColor,
           ),
         ),
       ],
