@@ -409,6 +409,29 @@ class AnimalProvider extends ChangeNotifier {
     try {
       return _animals.firstWhere((a) => a.id == id);
     } catch (_) {
+      // Also check server-side paginated table animals.
+      try {
+        return _tableAnimals.firstWhere((a) => a.id == id);
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  /// Fetches a single animal from the API and caches it in [_animals].
+  Future<Animal?> fetchAnimalById(String id) async {
+    try {
+      final animal = await ApiService().getAnimal(id);
+      // Add to local list so subsequent lookups work.
+      if (!_animals.any((a) => a.id == id)) {
+        _animals.add(animal);
+      } else {
+        final idx = _animals.indexWhere((a) => a.id == id);
+        _animals[idx] = animal;
+      }
+      notifyListeners();
+      return animal;
+    } catch (_) {
       return null;
     }
   }
