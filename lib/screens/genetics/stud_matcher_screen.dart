@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
+import '../../services/background_task_service.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
 
@@ -18,6 +20,8 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
   List<BreedingSuggestion> _matches = [];
   bool _isLoading = false;
   bool _filterSameBreedOnly = false;
+  int _taskProgress = 0;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -33,20 +37,105 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
     setState(() {
       _isLoading = true;
       _matches = [];
+      _errorMessage = null;
+      _taskProgress = 0;
     });
 
     final provider = context.read<AnimalProvider>();
-    // Use the genetics service with a high maxResults to get all females
-    final suggestions = await provider.geneticsService.generateBreedingSuggestions(
+
+    if (kIsWeb || provider.isDemoMode) {
+      // Use background task via API to avoid blocking
+      await _loadMatchesViaBackgroundTask();
+    } else {
+      // Mobile with local SQLite - use direct computation
+      final suggestions = await provider.geneticsService.generateBreedingSuggestions(
+        _selectedStudId!,
+        maxResults: 100,
+        maxCoiThreshold: 100.0,
+      );
+      if (mounted) {
+        setState(() {
+          _matches = suggestions;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMatchesViaBackgroundTask() async {
+    final taskService = BackgroundTaskService();
+    final result = await taskService.computeBreedingSuggestions(
       _selectedStudId!,
       maxResults: 100,
-      maxCoiThreshold: 100.0, // Show all, we'll colour-code them
+      maxCoi: 100.0,
+      onProgress: (status) {
+        if (mounted) {
+          setState(() => _taskProgress = status.progress);
+        }
+      },
     );
 
-    setState(() {
-      _matches = suggestions;
-      _isLoading = false;
-    });
+    if (!mounted) return;
+
+    if (result == null || result.isFailed) {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = result?.error ?? 'Failed to compute breeding suggestions';
+      });
+      return;
+    }
+
+    if (result.result != null) {
+      final suggestions = _parseSuggestionsResult(result.result!);
+      setState(() {
+        _matches = suggestions;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'No result data returned';
+      });
+    }
+  }
+
+  List<BreedingSuggestion> _parseSuggestionsResult(Map<String, dynamic> data) {
+    final list = data['suggestions'] as List? ?? [];
+    return list.map((s) {
+      final m = Map<String, dynamic>.from(s as Map);
+      return BreedingSuggestion(
+        sire: _animalFromApiData(Map<String, dynamic>.from(m['sire'] as Map)),
+        dam: _animalFromApiData(Map<String, dynamic>.from(m['dam'] as Map)),
+        compatibilityScore: (m['compatibility_score'] as num).toDouble(),
+        estimatedCoi: (m['estimated_coi'] as num).toDouble(),
+        pros: List<String>.from(m['pros'] as List? ?? []),
+        cons: List<String>.from(m['cons'] as List? ?? []),
+        geneticRisks: List<String>.from(m['genetic_risks'] as List? ?? []),
+        traitPredictions: Map<String, double>.from(
+          (m['trait_predictions'] as Map? ?? {}).map(
+            (k, v) => MapEntry(k as String, (v as num).toDouble()),
+          ),
+        ),
+      );
+    }).toList();
+  }
+
+  Animal _animalFromApiData(Map<String, dynamic> m) {
+    return Animal(
+      id: m['id'] as String? ?? '',
+      name: m['name'] as String? ?? 'Unknown',
+      species: m['species'] as String? ?? '',
+      breed: m['breed'] as String? ?? '',
+      sex: Sex.values[(m['sex'] as int?) ?? 0],
+      dateOfBirth: m['date_of_birth'] != null
+          ? DateTime.tryParse(m['date_of_birth'] as String)
+          : null,
+      color: m['color'] as String?,
+      registrationNumber: m['registration_number'] as String?,
+      status: AnimalStatus.values[(m['status'] as int?) ?? 0],
+      geneticTraits: {},
+      customFields: {},
+    );
   }
 
   List<BreedingSuggestion> get _filteredMatches {
@@ -123,16 +212,72 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
               // Results
               Expanded(
                 child: _isLoading
-                    ? const Center(child: CircularProgressIndicator())
-                    : _selectedStudId == null
-                        ? _buildEmptyState()
-                        : _filteredMatches.isEmpty && !_isLoading
-                            ? _buildNoMatchesState()
-                            : _buildMatchesList(provider),
+                    ? _buildLoadingState()
+                    : _errorMessage != null
+                        ? _buildErrorState()
+                        : _selectedStudId == null
+                            ? _buildEmptyState()
+                            : _filteredMatches.isEmpty && !_isLoading
+                                ? _buildNoMatchesState()
+                                : _buildMatchesList(provider),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildLoadingState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(
+            _taskProgress > 0
+                ? 'Analysing compatibility... $_taskProgress%'
+                : 'Analysing compatibility...',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Computing COI for all potential mates.\n'
+            'This runs in the background and will\nupdate automatically when ready.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.error_outline, size: 48, color: Colors.grey.shade400),
+          const SizedBox(height: 12),
+          Text(
+            _errorMessage ?? 'An error occurred',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton.icon(
+            onPressed: _loadMatches,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        ],
       ),
     );
   }

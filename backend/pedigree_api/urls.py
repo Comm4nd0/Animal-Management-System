@@ -38,6 +38,7 @@ router.register(r'support', SupportViewSet, basename='support')
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/v1/', include(router.urls)),
+    path('api/v1/tasks/', include('tasks.urls')),
     path('api/auth/', include('rest_framework.urls')),
     # Flutter web frontend catch-all (must be last)
     re_path(r'^(?!admin/|api/|static/).*$', frontend, name='frontend'),

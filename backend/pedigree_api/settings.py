@@ -33,7 +33,7 @@ INSTALLED_APPS = [
     'accounts',
     'animals',
     'genetics',
-    'support',
+    'tasks',
 ]
 
 MIDDLEWARE = [
@@ -178,21 +178,15 @@ if config('USE_S3', default=False, cast=bool):
     }
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
 
-# Email configuration
-# In production, configure a real email backend (SES, SMTP, etc.)
-EMAIL_BACKEND = config(
-    'EMAIL_BACKEND',
-    default='django.core.mail.backends.console.EmailBackend',
-)
-EMAIL_HOST = config('EMAIL_HOST', default='localhost')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-DEFAULT_FROM_EMAIL = config(
-    'DEFAULT_FROM_EMAIL',
-    default='noreply@pedigreemanager.com',
-)
+# Celery / Redis configuration
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 300  # 5 minute hard limit
+CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minute soft limit
 
 # Logging
 LOGGING = {

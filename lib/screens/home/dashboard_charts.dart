@@ -1000,3 +1000,506 @@ class _LegendItem {
   final Color color;
   const _LegendItem(this.label, this.color);
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Aggregated chart widgets – use pre-computed API data instead of
+// iterating through all animals in memory.
+// ═══════════════════════════════════════════════════════════════════
+
+class AggregatedTimelineChart extends StatelessWidget {
+  final List<TimelineEntry> data;
+  const AggregatedTimelineChart({super.key, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.length < 2) {
+      return _ChartCard(
+        title: 'Animals Added Over Time',
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              data.isEmpty
+                  ? 'No data yet'
+                  : '${data.first.count} animal${data.first.count == 1 ? '' : 's'} registered',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.grey.shade600,
+                  ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final spots = <FlSpot>[];
+    for (var i = 0; i < data.length; i++) {
+      spots.add(FlSpot(i.toDouble(), data[i].count.toDouble()));
+    }
+    final maxY = spots.map((s) => s.y).reduce(max);
+
+    return _ChartCard(
+      title: 'Animals Added Over Time',
+      child: SizedBox(
+        height: 200,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 16, top: 8),
+          child: LineChart(
+            LineChartData(
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: max(1, (maxY / 4).ceilToDouble()),
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 32,
+                    interval: max(1, (maxY / 4).ceilToDouble()),
+                    getTitlesWidget: (value, _) => Text(
+                      value.toInt().toString(),
+                      style: const TextStyle(fontSize: 10),
+                    ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 28,
+                    interval: max(1, (data.length / 5).ceilToDouble()),
+                    getTitlesWidget: (value, _) {
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= data.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final parts = data[idx].month.split('-');
+                      if (parts.length < 2) return const SizedBox.shrink();
+                      return Text(
+                        '${parts[1]}/${parts[0].substring(2)}',
+                        style: const TextStyle(fontSize: 9),
+                      );
+                    },
+                  ),
+                ),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              ),
+              borderData: FlBorderData(show: false),
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: true,
+                  preventCurveOverShooting: true,
+                  color: AppTheme.primaryColor,
+                  barWidth: 3,
+                  dotData: FlDotData(show: spots.length <= 12),
+                  belowBarData: BarAreaData(
+                    show: true,
+                    color: AppTheme.primaryColor.withValues(alpha: 0.15),
+                  ),
+                ),
+              ],
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipItems: (spots) => spots
+                      .map((s) => LineTooltipItem(
+                            '${data[s.x.toInt()].month}\n${s.y.toInt()} added',
+                            const TextStyle(color: Colors.white, fontSize: 12),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AggregatedPieChart extends StatelessWidget {
+  final String title;
+  final List<ChartEntry> data;
+  const AggregatedPieChart({super.key, required this.title, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.isEmpty || data.length <= 1) return const SizedBox.shrink();
+
+    final total = data.fold<int>(0, (sum, e) => sum + e.value);
+    if (total == 0) return const SizedBox.shrink();
+
+    final sections = <PieChartSectionData>[];
+    final legends = <_LegendItem>[];
+
+    for (var i = 0; i < data.length; i++) {
+      final entry = data[i];
+      if (entry.value <= 0) continue;
+      final color = _chartColors[i % _chartColors.length];
+      sections.add(PieChartSectionData(
+        value: entry.value.toDouble(),
+        title: '${(entry.value / total * 100).round()}%',
+        color: color,
+        radius: 50,
+        titleStyle: const TextStyle(
+            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+      ));
+      legends.add(_LegendItem('${entry.label} (${entry.value})', color));
+    }
+
+    return _ChartCard(
+      title: title,
+      child: SizedBox(
+        height: 180,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: PieChart(PieChartData(
+                sections: sections,
+                sectionsSpace: 2,
+                centerSpaceRadius: 30,
+              )),
+            ),
+            Expanded(
+              flex: 2,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: legends
+                    .map((l) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 12,
+                                height: 12,
+                                decoration: BoxDecoration(
+                                  color: l.color,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(l.label,
+                                    style: const TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AggregatedBarChart extends StatelessWidget {
+  final String title;
+  final List<ChartEntry> data;
+  const AggregatedBarChart({super.key, required this.title, required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.isEmpty) return const SizedBox.shrink();
+
+    final maxVal = data.map((e) => e.value).reduce(max).toDouble();
+    if (maxVal == 0) return const SizedBox.shrink();
+
+    return _ChartCard(
+      title: title,
+      child: SizedBox(
+        height: max(120, data.length * 36.0),
+        child: Padding(
+          padding: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
+          child: BarChart(
+            BarChartData(
+              alignment: BarChartAlignment.spaceAround,
+              maxY: maxVal * 1.15,
+              barTouchData: BarTouchData(
+                touchTooltipData: BarTouchTooltipData(
+                  getTooltipItem: (group, gIdx, rod, rIdx) => BarTooltipItem(
+                    '${data[group.x.toInt()].label}: ${rod.toY.toInt()}',
+                    const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ),
+              ),
+              titlesData: FlTitlesData(
+                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 40,
+                    getTitlesWidget: (value, meta) {
+                      final idx = value.toInt();
+                      if (idx < 0 || idx >= data.length) {
+                        return const SizedBox.shrink();
+                      }
+                      final label = data[idx].label;
+                      return SideTitleWidget(
+                        axisSide: meta.axisSide,
+                        child: SizedBox(
+                          width: 60,
+                          child: Text(
+                            label.length > 10
+                                ? '${label.substring(0, 9)}...'
+                                : label,
+                            style: const TextStyle(fontSize: 9),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              gridData: const FlGridData(show: false),
+              borderData: FlBorderData(show: false),
+              barGroups: List.generate(data.length, (i) {
+                return BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: data[i].value.toDouble(),
+                      color: _chartColors[i % _chartColors.length],
+                      width: 22,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(4),
+                        topRight: Radius.circular(4),
+                      ),
+                    ),
+                  ],
+                );
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AggregatedGeneticDiversityCard extends StatelessWidget {
+  final GeneticDiversityStats stats;
+  const AggregatedGeneticDiversityCard({super.key, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    if (stats.totalAnimals == 0) return const SizedBox.shrink();
+
+    return _ChartCard(
+      title: 'Genetic Diversity',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          children: [
+            if (stats.animalsWithSire > 0 || stats.animalsWithDam > 0) ...[
+              _DiversityBar(
+                label: 'Sire diversity',
+                value: stats.sireRatio,
+                subtitle: '${stats.uniqueSires} unique sires across ${stats.animalsWithSire} animals',
+                color: AppTheme.maleColor,
+              ),
+              const SizedBox(height: 12),
+              _DiversityBar(
+                label: 'Dam diversity',
+                value: stats.damRatio,
+                subtitle: '${stats.uniqueDams} unique dams across ${stats.animalsWithDam} animals',
+                color: AppTheme.femaleColor,
+              ),
+              const SizedBox(height: 16),
+            ],
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MetricChip(
+                  label: 'Total',
+                  value: '${stats.totalAnimals}',
+                  icon: Icons.pets,
+                ),
+                if (stats.effectivePopulationSize != null)
+                  _MetricChip(
+                    label: 'Eff. Pop Size',
+                    value: stats.effectivePopulationSize!.toStringAsFixed(1),
+                    icon: Icons.group,
+                  ),
+                if (stats.averageCoi != null)
+                  _MetricChip(
+                    label: 'Avg COI',
+                    value: '${(stats.averageCoi! * 100).toStringAsFixed(2)}%',
+                    icon: Icons.science,
+                    color: stats.averageCoi! > 0.0625
+                        ? AppTheme.errorColor
+                        : stats.averageCoi! > 0.03
+                            ? AppTheme.accentColor
+                            : AppTheme.primaryColor,
+                  ),
+                _MetricChip(
+                  label: 'Pedigree coverage',
+                  value: '${(stats.pedigreeCoverage * 100).round()}%',
+                  icon: Icons.account_tree,
+                ),
+              ],
+            ),
+            if (stats.animalsWithSire == 0 && stats.animalsWithDam == 0)
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Add sire/dam data to see genetic diversity metrics',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AggregatedHealthRemindersCard extends StatelessWidget {
+  final HealthReminderData reminders;
+  const AggregatedHealthRemindersCard({super.key, required this.reminders});
+
+  @override
+  Widget build(BuildContext context) {
+    if (reminders.isEmpty) return const SizedBox.shrink();
+
+    return _ChartCard(
+      title: 'Health Reminders',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (reminders.overdue.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded,
+                      size: 18, color: AppTheme.errorColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${reminders.overdue.length} overdue',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.errorColor,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...reminders.overdue.take(3).map((r) => _AggregatedReminderTile(
+                  entry: r,
+                  isOverdue: true,
+                )),
+            if (reminders.overdue.length > 3)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 4),
+                child: Text(
+                  '+${reminders.overdue.length - 3} more overdue',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+            if (reminders.upcoming.isNotEmpty) const Divider(height: 20),
+          ],
+          if (reminders.upcoming.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.schedule, size: 18, color: AppTheme.accentColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${reminders.upcoming.length} upcoming (next 30 days)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentColor,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...reminders.upcoming.take(5).map((r) => _AggregatedReminderTile(
+                  entry: r,
+                  isOverdue: false,
+                )),
+            if (reminders.upcoming.length > 5)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 4),
+                child: Text(
+                  '+${reminders.upcoming.length - 5} more upcoming',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AggregatedReminderTile extends StatelessWidget {
+  final HealthReminderEntry entry;
+  final bool isOverdue;
+
+  const _AggregatedReminderTile({
+    required this.entry,
+    required this.isOverdue,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isOverdue ? AppTheme.errorColor : AppTheme.accentColor;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.title,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${entry.animalName}  \u2022  Due: ${entry.nextDueDate}',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.grey.shade600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

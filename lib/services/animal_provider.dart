@@ -25,6 +25,7 @@ class AnimalProvider extends ChangeNotifier {
   List<Litter> _litters = [];
   List<CustomFieldDefinition> _customFieldDefinitions = [];
   Map<String, int> _stats = {};
+  DashboardStats? _dashboardStats;
   bool _isLoading = false;
   String _searchQuery = '';
   String? _selectedSpeciesFilter;
@@ -85,7 +86,8 @@ class AnimalProvider extends ChangeNotifier {
   List<Litter> get litters => _litters;
   List<CustomFieldDefinition> get customFieldDefinitions =>
       _customFieldDefinitions;
-  Map<String, int> get stats => _stats;
+  Map<String, int> get stats => _dashboardStats?.counts ?? _stats;
+  DashboardStats? get dashboardStats => _dashboardStats;
   bool get isLoading => _isLoading;
   String get searchQuery => _searchQuery;
   String? get selectedSpeciesFilter => _selectedSpeciesFilter;
@@ -240,6 +242,9 @@ class AnimalProvider extends ChangeNotifier {
 
   /// Loads all data directly from the API into memory, bypassing SQLite.
   /// Used for web demo mode where sqflite is not available.
+  ///
+  /// Fetches pre-aggregated dashboard stats from the API instead of loading
+  /// every animal record. Only recent animals (5) are loaded for display.
   Future<void> loadAllFromApi() async {
     _isLoading = true;
     notifyListeners();
@@ -247,15 +252,51 @@ class AnimalProvider extends ChangeNotifier {
     try {
       final api = ApiService();
 
-      // Load the first page of each resource for a fast demo entry.
-      // This gives the user a representative sample of data instantly.
-      _animals = await api.getAnimals();
-      _contacts = await api.getContacts();
+      // Fetch pre-aggregated dashboard stats in a single request.
+      // This replaces loading ALL animals just to compute totals and charts.
+      final dashboardData = await api.getDashboardStats();
+      _dashboardStats = DashboardStats.fromApi(dashboardData);
+
+      // Build a minimal animal list from the recent animals in dashboard stats
+      // so the rest of the UI still works (recent animals, breeding records, etc.)
+      _animals = _dashboardStats!.recentAnimals.map((m) {
+        return Animal(
+          id: m['id'] as String,
+          name: m['name'] as String,
+          species: m['species'] as String,
+          breed: m['breed'] as String,
+          sex: Sex.values[m['sex'] as int? ?? 0],
+          dateOfBirth: m['date_of_birth'] != null
+              ? DateTime.tryParse(m['date_of_birth'] as String)
+              : null,
+          color: m['color'] as String?,
+          registrationNumber: m['registration_number'] as String?,
+          status: AnimalStatus.values[m['status'] as int? ?? 0],
+          geneticTraits: {},
+          customFields: {},
+        );
+      }).toList();
+
+      // Build breeding records from dashboard stats
+      _breedingRecords = _dashboardStats!.activeBreedings.map((m) {
+        return BreedingRecord(
+          id: m['id'] as String? ?? '',
+          sireId: m['sire'] as String? ?? '',
+          damId: m['dam'] as String? ?? '',
+          breedingDate: m['breeding_date'] != null
+              ? DateTime.parse(m['breeding_date'] as String)
+              : DateTime.now(),
+          expectedDueDate: m['expected_due_date'] != null
+              ? DateTime.tryParse(m['expected_due_date'] as String)
+              : null,
+          status: BreedingStatus.values[m['status'] as int? ?? 0],
+        );
+      }).toList();
 
       try {
-        _breedingRecords = await api.getActiveBreedings();
+        _contacts = await api.getContacts();
       } catch (_) {
-        _breedingRecords = [];
+        _contacts = [];
       }
 
       try {
@@ -269,13 +310,6 @@ class AnimalProvider extends ChangeNotifier {
       } catch (_) {
         _customFieldDefinitions = [];
       }
-
-      // Build stats from the loaded animals
-      final statsMap = <String, int>{};
-      for (final animal in _animals) {
-        statsMap[animal.species] = (statsMap[animal.species] ?? 0) + 1;
-      }
-      _stats = statsMap;
     } finally {
       _isLoading = false;
       notifyListeners();
