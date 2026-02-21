@@ -203,18 +203,20 @@ class AnimalViewSet(viewsets.ModelViewSet):
         """
         from collections import Counter
         from datetime import date
+        from django.db.models.functions import TruncMonth
 
         qs = self.get_queryset()
 
         # ── Registration timeline (animals created per month) ─────
         timeline_qs = (
-            qs.extra(select={'month': "strftime('%%Y-%%m', created_at)"})
-            .values('month')
+            qs.annotate(month_trunc=TruncMonth('created_at'))
+            .values('month_trunc')
             .annotate(count=db_models.Count('id'))
-            .order_by('month')
+            .order_by('month_trunc')
         )
         registration_timeline = [
-            {'month': row['month'], 'count': row['count']}
+            {'month': row['month_trunc'].strftime('%Y-%m') if row['month_trunc'] else None,
+             'count': row['count']}
             for row in timeline_qs
         ]
 
@@ -358,16 +360,21 @@ class AnimalViewSet(viewsets.ModelViewSet):
             | db_models.Q(microchip_number__icontains=query)
         )
 
-        # Also search across all custom_fields values using JSON containment
-        # This finds any animal whose custom_fields JSON contains the query text
+        # Also search across all custom_fields values.
+        # Use a database-agnostic approach: cast the JSONField to text
+        # using Django's Value/CharField and filter with __icontains.
+        from django.db.models import TextField
+        from django.db.models.functions import Cast
+
         animals = base_qs.filter(standard_q)
 
-        # Additionally search custom fields by checking if any value matches
+        # Search custom fields by casting JSON to text
         custom_matches = base_qs.exclude(
             custom_fields={},
-        ).extra(
-            where=["CAST(custom_fields AS TEXT) ILIKE %s"],
-            params=[f'%{query}%'],
+        ).annotate(
+            custom_fields_text=Cast('custom_fields', output_field=TextField()),
+        ).filter(
+            custom_fields_text__icontains=query,
         )
         animals = (animals | custom_matches).distinct()[:25]
 

@@ -103,6 +103,36 @@ class NotificationService {
     await _plugin.show(id, title, body, details);
   }
 
+  /// Show a push notification for a new support message.
+  Future<void> notifySupportMessage({
+    required String ticketSubject,
+    required String messagePreview,
+    int? ticketHashCode,
+  }) async {
+    if (!_initialized) return;
+
+    await _showNotification(
+      id: 3000 + (ticketHashCode ?? messagePreview.hashCode) % 1000,
+      title: 'Support: $ticketSubject',
+      body: messagePreview,
+      channel: 'support_messages',
+      channelName: 'Support Messages',
+    );
+  }
+
+  /// Show a notification for unread support messages count.
+  Future<void> notifySupportUnread(int count) async {
+    if (!_initialized || count <= 0) return;
+
+    await _showNotification(
+      id: 3999,
+      title: 'Support Messages',
+      body: 'You have $count unread support message${count == 1 ? '' : 's'}',
+      channel: 'support_messages',
+      channelName: 'Support Messages',
+    );
+  }
+
   /// Cancel all scheduled notifications.
   Future<void> cancelAllNotifications() async {
     if (!_initialized) return;

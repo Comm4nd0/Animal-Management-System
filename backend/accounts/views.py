@@ -37,18 +37,23 @@ class AccountViewSet(viewsets.ViewSet):
         Log in as the demo user (read-only, no password required).
 
         Returns a token and profile with is_demo: true.
-        The demo user must be created first by running:
-            python manage.py seed_demo
+        Auto-creates the demo user account if it doesn't exist yet.
+        For full demo data (~2,500 animals), run: python manage.py seed_demo
         """
         from django.contrib.auth.models import User
 
-        try:
-            user = User.objects.get(username='demo_user')
-        except User.DoesNotExist:
-            return Response(
-                {'error': 'Demo environment is not configured. Run seed_demo first.'},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        user, created = User.objects.get_or_create(
+            username='demo_user',
+            defaults={
+                'email': 'demo@pedigreemanager.app',
+                'first_name': 'Demo',
+                'last_name': 'User',
+                'is_active': True,
+            },
+        )
+        if created:
+            user.set_unusable_password()
+            user.save()
 
         token, _ = Token.objects.get_or_create(user=user)
         try:
@@ -58,6 +63,7 @@ class AccountViewSet(viewsets.ViewSet):
                 user=user,
                 service_tier=ServiceTier.ENTERPRISE,
                 role=UserRole.READ_ONLY,
+                farm_name='Pedigree Manager Demo Farm',
             )
 
         return Response({

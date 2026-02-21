@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'accounts',
     'animals',
     'genetics',
+    'support',
 ]
 
 MIDDLEWARE = [
