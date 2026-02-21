@@ -208,10 +208,10 @@ class AnimalProvider extends ChangeNotifier {
       _animals.map((a) => a.breed).toSet().toList()..sort();
 
   List<Animal> get maleAnimals =>
-      _animals.where((a) => a.sex == Sex.male && a.status == AnimalStatus.alive).toList();
+      _animals.where((a) => a.sex == Sex.male).toList();
 
   List<Animal> get femaleAnimals =>
-      _animals.where((a) => a.sex == Sex.female && a.status == AnimalStatus.alive).toList();
+      _animals.where((a) => a.sex == Sex.female).toList();
 
   // ─── Loading ───────────────────────────────────────────────────
 

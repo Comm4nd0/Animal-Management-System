@@ -231,40 +231,24 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                 const SizedBox(height: 24),
                 _buildSectionTitle('Parentage'),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: _selectedSireId,
-                  decoration: const InputDecoration(
-                    labelText: 'Sire (Father)',
-                    prefixIcon: Icon(Icons.male),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Unknown')),
-                    ...provider.maleAnimals
-                        .where((a) => a.id != widget.animalId)
-                        .map((a) => DropdownMenuItem(
-                              value: a.id,
-                              child: Text('${a.name} (${a.breed})'),
-                            )),
-                  ],
-                  onChanged: (v) => setState(() => _selectedSireId = v),
+                _buildParentAutocomplete(
+                  label: 'Sire (Father)',
+                  icon: Icons.male,
+                  selectedId: _selectedSireId,
+                  candidates: provider.maleAnimals
+                      .where((a) => a.id != widget.animalId)
+                      .toList(),
+                  onSelected: (id) => setState(() => _selectedSireId = id),
                 ),
                 const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _selectedDamId,
-                  decoration: const InputDecoration(
-                    labelText: 'Dam (Mother)',
-                    prefixIcon: Icon(Icons.female),
-                  ),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('Unknown')),
-                    ...provider.femaleAnimals
-                        .where((a) => a.id != widget.animalId)
-                        .map((a) => DropdownMenuItem(
-                              value: a.id,
-                              child: Text('${a.name} (${a.breed})'),
-                            )),
-                  ],
-                  onChanged: (v) => setState(() => _selectedDamId = v),
+                _buildParentAutocomplete(
+                  label: 'Dam (Mother)',
+                  icon: Icons.female,
+                  selectedId: _selectedDamId,
+                  candidates: provider.femaleAnimals
+                      .where((a) => a.id != widget.animalId)
+                      .toList(),
+                  onSelected: (id) => setState(() => _selectedDamId = id),
                 ),
 
                 const SizedBox(height: 24),
@@ -681,6 +665,145 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     if (picked != null) {
       setState(() => _dateOfBirth = picked);
     }
+  }
+
+  /// Formats an animal for display in the autocomplete field and suggestions.
+  String _formatAnimalDisplay(Animal a) {
+    final reg = a.registrationNumber;
+    if (reg != null && reg.isNotEmpty) {
+      return '${a.name} - $reg (${a.breed})';
+    }
+    return '${a.name} (${a.breed})';
+  }
+
+  /// Builds a typeahead autocomplete field for selecting a parent animal.
+  /// Users can search by name or registration number.
+  Widget _buildParentAutocomplete({
+    required String label,
+    required IconData icon,
+    required String? selectedId,
+    required List<Animal> candidates,
+    required ValueChanged<String?> onSelected,
+  }) {
+    // Resolve the currently selected animal for display
+    final selectedAnimal = selectedId != null
+        ? candidates.cast<Animal?>().firstWhere(
+              (a) => a!.id == selectedId,
+              orElse: () => null,
+            )
+        : null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Autocomplete<Animal>(
+                displayStringForOption: _formatAnimalDisplay,
+                initialValue: selectedAnimal != null
+                    ? TextEditingValue(
+                        text: _formatAnimalDisplay(selectedAnimal))
+                    : TextEditingValue.empty,
+                optionsBuilder: (TextEditingValue textEditingValue) {
+                  if (textEditingValue.text.isEmpty) {
+                    return candidates;
+                  }
+                  final query = textEditingValue.text.toLowerCase();
+                  return candidates.where((animal) {
+                    return animal.name.toLowerCase().contains(query) ||
+                        (animal.registrationNumber
+                                ?.toLowerCase()
+                                .contains(query) ??
+                            false);
+                  });
+                },
+                onSelected: (Animal animal) {
+                  onSelected(animal.id);
+                },
+                fieldViewBuilder: (context, textController, focusNode,
+                    onFieldSubmitted) {
+                  return TextFormField(
+                    controller: textController,
+                    focusNode: focusNode,
+                    decoration: InputDecoration(
+                      labelText: label,
+                      prefixIcon: Icon(icon),
+                      hintText: 'Type name or reg number to search...',
+                      suffixIcon: selectedId != null
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              tooltip: 'Clear selection',
+                              onPressed: () {
+                                textController.clear();
+                                onSelected(null);
+                              },
+                            )
+                          : null,
+                    ),
+                    onChanged: (value) {
+                      // If the user clears the text manually, clear the selection
+                      if (value.isEmpty && selectedId != null) {
+                        onSelected(null);
+                      }
+                    },
+                  );
+                },
+                optionsViewBuilder: (context, onAutoSelected, options) {
+                  return Align(
+                    alignment: Alignment.topLeft,
+                    child: Material(
+                      elevation: 4,
+                      borderRadius: BorderRadius.circular(8),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: 240,
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: options.length,
+                          itemBuilder: (context, index) {
+                            final animal = options.elementAt(index);
+                            return ListTile(
+                              dense: true,
+                              leading: Icon(
+                                icon,
+                                size: 20,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                              title: Text(
+                                animal.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Text(
+                                [
+                                  if (animal.registrationNumber != null &&
+                                      animal.registrationNumber!.isNotEmpty)
+                                    'Reg: ${animal.registrationNumber}',
+                                  animal.breed,
+                                ].join(' · '),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              onTap: () => onAutoSelected(animal),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildContactDropdown({
