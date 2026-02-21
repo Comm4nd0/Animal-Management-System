@@ -80,11 +80,13 @@ class ApiService {
     String? species,
     String? breed,
     String? search,
+    int? sex,
   }) async {
     final params = <String, String>{};
     if (species != null) params['species'] = species;
     if (breed != null) params['breed'] = breed;
     if (search != null) params['search'] = search;
+    if (sex != null) params['sex'] = '$sex';
 
     final data = await _get('/animals/', queryParams: params.isEmpty ? null : params);
     final results = data['results'] as List? ?? data as List;

@@ -213,6 +213,49 @@ class AnimalProvider extends ChangeNotifier {
   List<Animal> get femaleAnimals =>
       _animals.where((a) => a.sex == Sex.female).toList();
 
+  // ─── Parent Candidate Search ────────────────────────────────────
+
+  /// Searches for parent candidates via the API, filtered by species, breed,
+  /// sex, and an optional text query (name or registration number).
+  /// Falls back to local filtering when the API is unavailable.
+  Future<List<Animal>> searchParentCandidates({
+    required String species,
+    String? breed,
+    required Sex sex,
+    String query = '',
+  }) async {
+    try {
+      final results = await ApiService().getAnimals(
+        species: species,
+        breed: (breed != null && breed.isNotEmpty) ? breed : null,
+        sex: sex == Sex.male ? 0 : 1,
+        search: query.isNotEmpty ? query : null,
+      );
+      return results;
+    } catch (_) {
+      // Fallback to local filtering when API is unavailable
+      final sexAnimals = sex == Sex.male ? maleAnimals : femaleAnimals;
+      final lowerSpecies = species.toLowerCase();
+      final lowerBreed = breed?.toLowerCase() ?? '';
+      final lowerQuery = query.toLowerCase();
+      return sexAnimals.where((a) {
+        if (a.species.toLowerCase() != lowerSpecies) return false;
+        if (lowerBreed.isNotEmpty && a.breed.toLowerCase() != lowerBreed) {
+          return false;
+        }
+        if (lowerQuery.isNotEmpty) {
+          final matchesName = a.name.toLowerCase().contains(lowerQuery);
+          final matchesReg = a.registrationNumber
+                  ?.toLowerCase()
+                  .contains(lowerQuery) ??
+              false;
+          if (!matchesName && !matchesReg) return false;
+        }
+        return true;
+      }).toList();
+    }
+  }
+
   // ─── Loading ───────────────────────────────────────────────────
 
   Future<void> loadAll() async {

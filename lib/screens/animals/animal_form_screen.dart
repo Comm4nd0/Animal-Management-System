@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -52,22 +53,124 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   final _damFocusNode = FocusNode();
   bool _sireShowSuggestions = false;
   bool _damShowSuggestions = false;
+  // API-based search results for parent candidates
+  List<Animal> _sireSuggestions = [];
+  List<Animal> _damSuggestions = [];
+  Timer? _sireDebounce;
+  Timer? _damDebounce;
+  bool _sireSearchLoading = false;
+  bool _damSearchLoading = false;
 
   @override
   void initState() {
     super.initState();
     _sireFocusNode.addListener(() {
-      setState(() => _sireShowSuggestions = _sireFocusNode.hasFocus);
+      final hasFocus = _sireFocusNode.hasFocus;
+      setState(() => _sireShowSuggestions = hasFocus);
+      if (hasFocus && _selectedSireId == null) {
+        _searchParentCandidates(isSire: true);
+      }
     });
     _damFocusNode.addListener(() {
-      setState(() => _damShowSuggestions = _damFocusNode.hasFocus);
+      final hasFocus = _damFocusNode.hasFocus;
+      setState(() => _damShowSuggestions = hasFocus);
+      if (hasFocus && _selectedDamId == null) {
+        _searchParentCandidates(isSire: false);
+      }
     });
-    _sireSearchController.addListener(() => setState(() {}));
-    _damSearchController.addListener(() => setState(() {}));
+    _sireSearchController.addListener(() {
+      _sireDebounce?.cancel();
+      _sireDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (_selectedSireId == null) {
+          _searchParentCandidates(isSire: true);
+        }
+      });
+    });
+    _damSearchController.addListener(() {
+      _damDebounce?.cancel();
+      _damDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (_selectedDamId == null) {
+          _searchParentCandidates(isSire: false);
+        }
+      });
+    });
     if (widget.animalId != null) {
       _isEditing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _loadAnimal();
+      });
+    }
+  }
+
+  /// Searches for parent candidates via the API with current form state.
+  Future<void> _searchParentCandidates({required bool isSire}) async {
+    final provider = context.read<AnimalProvider>();
+    final controller = isSire ? _sireSearchController : _damSearchController;
+    final species = _selectedSpecies;
+    final breed = _breedController.text.trim();
+    final sex = isSire ? Sex.male : Sex.female;
+
+    // Determine query text — ignore display text of already-selected parent
+    String query = controller.text.trim();
+    final selectedId = isSire ? _selectedSireId : _selectedDamId;
+    if (selectedId != null) {
+      // If the text matches the display of the selected animal, clear it
+      final allAnimals = isSire ? provider.maleAnimals : provider.femaleAnimals;
+      final sel = allAnimals.cast<Animal?>().firstWhere(
+            (a) => a!.id == selectedId,
+            orElse: () => null,
+          );
+      if (sel != null && query == _formatAnimalDisplay(sel)) {
+        return; // Already selected, don't search
+      }
+    }
+
+    setState(() {
+      if (isSire) {
+        _sireSearchLoading = true;
+      } else {
+        _damSearchLoading = true;
+      }
+    });
+
+    try {
+      final results = await provider.searchParentCandidates(
+        species: species,
+        breed: breed,
+        sex: sex,
+        query: query,
+      );
+
+      if (!mounted) return;
+
+      // Apply client-side filters the API can't handle (self-exclusion, DOB)
+      final filtered = results.where((a) {
+        if (a.id == widget.animalId) return false;
+        if (_dateOfBirth != null &&
+            a.dateOfBirth != null &&
+            !a.dateOfBirth!.isBefore(_dateOfBirth!)) {
+          return false;
+        }
+        return true;
+      }).toList();
+
+      setState(() {
+        if (isSire) {
+          _sireSuggestions = filtered;
+          _sireSearchLoading = false;
+        } else {
+          _damSuggestions = filtered;
+          _damSearchLoading = false;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (isSire) {
+          _sireSearchLoading = false;
+        } else {
+          _damSearchLoading = false;
+        }
       });
     }
   }
@@ -124,6 +227,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
 
   @override
   void dispose() {
+    _sireDebounce?.cancel();
+    _damDebounce?.cancel();
     _nameController.dispose();
     _breedController.dispose();
     _colorController.dispose();
@@ -323,7 +428,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   label: 'Sire (Father)',
                   icon: Icons.male,
                   selectedId: _selectedSireId,
-                  allAnimals: provider.maleAnimals,
+                  suggestions: _sireSuggestions,
+                  isLoading: _sireSearchLoading,
                   controller: _sireSearchController,
                   focusNode: _sireFocusNode,
                   showSuggestions: _sireShowSuggestions,
@@ -337,6 +443,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   onCleared: () => setState(() {
                     _selectedSireId = null;
                     _sireSearchController.clear();
+                    _sireSuggestions = [];
                   }),
                 ),
                 const SizedBox(height: 12),
@@ -344,7 +451,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   label: 'Dam (Mother)',
                   icon: Icons.female,
                   selectedId: _selectedDamId,
-                  allAnimals: provider.femaleAnimals,
+                  suggestions: _damSuggestions,
+                  isLoading: _damSearchLoading,
                   controller: _damSearchController,
                   focusNode: _damFocusNode,
                   showSuggestions: _damShowSuggestions,
@@ -358,6 +466,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   onCleared: () => setState(() {
                     _selectedDamId = null;
                     _damSearchController.clear();
+                    _damSuggestions = [];
                   }),
                 ),
 
@@ -786,39 +895,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     }
   }
 
-  /// Filters parent candidates by species, breed, DOB, and search query.
-  /// Accesses form state directly so results are always up-to-date.
-  List<Animal> _filterParentCandidates(
-      List<Animal> animals, String query) {
-    final breed = _breedController.text.trim().toLowerCase();
-    final species = _selectedSpecies.toLowerCase();
-    final lowerQuery = query.toLowerCase();
 
-    return animals.where((a) {
-      // Exclude self
-      if (a.id == widget.animalId) return false;
-      // Same species
-      if (a.species.toLowerCase() != species) return false;
-      // Same breed (when breed is specified)
-      if (breed.isNotEmpty && a.breed.toLowerCase() != breed) return false;
-      // Parent must be born before this animal
-      if (_dateOfBirth != null &&
-          a.dateOfBirth != null &&
-          !a.dateOfBirth!.isBefore(_dateOfBirth!)) {
-        return false;
-      }
-      // Text search by name or registration number
-      if (lowerQuery.isNotEmpty) {
-        final matchesName = a.name.toLowerCase().contains(lowerQuery);
-        final matchesReg = a.registrationNumber
-                ?.toLowerCase()
-                .contains(lowerQuery) ??
-            false;
-        if (!matchesName && !matchesReg) return false;
-      }
-      return true;
-    }).toList();
-  }
 
   Future<void> _pickDateOfBirth() async {
     final picked = await showDatePicker(
@@ -871,32 +948,20 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   /// Builds an inline typeahead field for selecting a parent animal.
   /// Renders suggestions directly in the form (not via overlay) so they
   /// are always visible inside the scrollable ListView.
+  /// Suggestions are fetched from the API and passed in via [suggestions].
   Widget _buildParentTypeahead({
     required String label,
     required IconData icon,
     required String? selectedId,
-    required List<Animal> allAnimals,
+    required List<Animal> suggestions,
+    required bool isLoading,
     required TextEditingController controller,
     required FocusNode focusNode,
     required bool showSuggestions,
     required ValueChanged<Animal> onSelected,
     required VoidCallback onCleared,
   }) {
-    // Determine the search query: if a parent is already selected and the
-    // text matches the display string, treat it as no active search.
-    String query = controller.text;
-    if (selectedId != null) {
-      final sel = allAnimals.cast<Animal?>().firstWhere(
-            (a) => a!.id == selectedId,
-            orElse: () => null,
-          );
-      if (sel != null && query == _formatAnimalDisplay(sel)) {
-        query = '';
-      }
-    }
-
-    final suggestions = _filterParentCandidates(allAnimals, query);
-    final shouldShow = showSuggestions && selectedId == null && suggestions.isNotEmpty;
+    final shouldShow = showSuggestions && selectedId == null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -914,7 +979,16 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     tooltip: 'Clear selection',
                     onPressed: onCleared,
                   )
-                : null,
+                : isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
           ),
           onChanged: (value) {
             if (value.isEmpty && selectedId != null) {
@@ -922,7 +996,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
             }
           },
         ),
-        if (shouldShow)
+        if (shouldShow && suggestions.isNotEmpty)
           Container(
             constraints: const BoxConstraints(maxHeight: 200),
             margin: const EdgeInsets.only(top: 2),
@@ -970,6 +1044,18 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   onTap: () => onSelected(animal),
                 );
               },
+            ),
+          ),
+        if (shouldShow && suggestions.isEmpty && !isLoading && controller.text.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'No matching animals found',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ),
       ],
