@@ -6,6 +6,51 @@ import '../../models/models.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/demo_write_guard.dart';
 
+/// Identifiers for every column available in the animals table.
+enum AnimalColumn {
+  name,
+  species,
+  breed,
+  sex,
+  dob,
+  status,
+  color,
+  regNumber,
+  microchip,
+  added,
+}
+
+/// Metadata for each column: display label, optional API sort key.
+class _ColumnDef {
+  final String label;
+  final String? sortField;
+  const _ColumnDef(this.label, {this.sortField});
+}
+
+const Map<AnimalColumn, _ColumnDef> _columnDefs = {
+  AnimalColumn.name: _ColumnDef('Name', sortField: 'name'),
+  AnimalColumn.species: _ColumnDef('Species'),
+  AnimalColumn.breed: _ColumnDef('Breed', sortField: 'breed'),
+  AnimalColumn.sex: _ColumnDef('Sex'),
+  AnimalColumn.dob: _ColumnDef('DOB', sortField: 'date_of_birth'),
+  AnimalColumn.status: _ColumnDef('Status'),
+  AnimalColumn.color: _ColumnDef('Color'),
+  AnimalColumn.regNumber: _ColumnDef('Reg #'),
+  AnimalColumn.microchip: _ColumnDef('Microchip'),
+  AnimalColumn.added: _ColumnDef('Added', sortField: 'created_at'),
+};
+
+/// Default visible columns (Name is always shown).
+const List<AnimalColumn> _defaultVisibleColumns = [
+  AnimalColumn.name,
+  AnimalColumn.breed,
+  AnimalColumn.sex,
+  AnimalColumn.dob,
+  AnimalColumn.status,
+  AnimalColumn.regNumber,
+  AnimalColumn.added,
+];
+
 class AnimalListScreen extends StatefulWidget {
   const AnimalListScreen({super.key});
 
@@ -17,10 +62,12 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
   final _searchController = TextEditingController();
   Timer? _debounce;
   bool _showFilters = false;
+  late List<AnimalColumn> _visibleColumns;
 
   @override
   void initState() {
     super.initState();
+    _visibleColumns = List.from(_defaultVisibleColumns);
     // Trigger initial data load after the first frame.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<AnimalProvider>();
@@ -43,6 +90,94 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
     });
   }
 
+  void _showColumnPicker() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        // Work on a temporary copy so Cancel discards changes.
+        var tempColumns = List<AnimalColumn>.from(_visibleColumns);
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('Choose Columns'),
+              content: SizedBox(
+                width: 300,
+                child: ReorderableListView(
+                  shrinkWrap: true,
+                  buildDefaultDragHandles: false,
+                  onReorder: (oldIndex, newIndex) {
+                    setDialogState(() {
+                      if (newIndex > oldIndex) newIndex--;
+                      final item = tempColumns.removeAt(oldIndex);
+                      tempColumns.insert(newIndex, item);
+                    });
+                  },
+                  children: [
+                    for (final col in AnimalColumn.values)
+                      CheckboxListTile(
+                        key: ValueKey(col),
+                        value: tempColumns.contains(col),
+                        // Name column cannot be removed.
+                        enabled: col != AnimalColumn.name,
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(_columnDefs[col]!.label),
+                            ),
+                            if (tempColumns.contains(col))
+                              ReorderableDragStartListener(
+                                index: AnimalColumn.values.indexOf(col),
+                                child: const Icon(Icons.drag_handle,
+                                    size: 20, color: Colors.grey),
+                              ),
+                          ],
+                        ),
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: col == AnimalColumn.name
+                            ? null
+                            : (checked) {
+                                setDialogState(() {
+                                  if (checked == true) {
+                                    tempColumns.add(col);
+                                  } else {
+                                    tempColumns.remove(col);
+                                  }
+                                });
+                              },
+                      ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    setState(() {
+                      _visibleColumns = tempColumns
+                          .where((c) => tempColumns.contains(c))
+                          .toList();
+                      // Ensure ordering follows tempColumns' checked items.
+                      _visibleColumns = [
+                        for (final c in tempColumns)
+                          if (tempColumns.contains(c)) c,
+                      ];
+                    });
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -50,7 +185,13 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
         title: const Text('Animals'),
         actions: [
           IconButton(
-            icon: Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list),
+            icon: const Icon(Icons.view_column),
+            tooltip: 'Choose columns',
+            onPressed: _showColumnPicker,
+          ),
+          IconButton(
+            icon: Icon(
+                _showFilters ? Icons.filter_list_off : Icons.filter_list),
             tooltip: 'Toggle filters',
             onPressed: () => setState(() => _showFilters = !_showFilters),
           ),
@@ -117,9 +258,10 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
                     isDense: true,
                   ),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('All Species')),
-                    ...provider.availableSpecies.map((s) =>
-                        DropdownMenuItem(value: s, child: Text(s))),
+                    const DropdownMenuItem(
+                        value: null, child: Text('All Species')),
+                    ...provider.availableSpecies
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s))),
                   ],
                   onChanged: (v) => provider.setTableSpeciesFilter(v),
                 ),
@@ -133,9 +275,10 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
                     isDense: true,
                   ),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('All Breeds')),
-                    ...provider.availableBreeds.map((b) =>
-                        DropdownMenuItem(value: b, child: Text(b))),
+                    const DropdownMenuItem(
+                        value: null, child: Text('All Breeds')),
+                    ...provider.availableBreeds
+                        .map((b) => DropdownMenuItem(value: b, child: Text(b))),
                   ],
                   onChanged: (v) => provider.setTableBreedFilter(v),
                 ),
@@ -246,6 +389,8 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
     );
   }
 
+  // ─── DataTable (dynamic columns) ──────────────────────────────────
+
   Widget _buildDataTable(AnimalProvider provider) {
     if (provider.tableError != null && provider.tableAnimals.isEmpty) {
       return Center(
@@ -309,7 +454,7 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
                 constraints: BoxConstraints(minWidth: constraints.maxWidth),
                 child: SingleChildScrollView(
                   child: DataTable(
-                    sortColumnIndex: _sortColumnIndex(provider.tableSortColumn),
+                    sortColumnIndex: _activeSortIndex(provider.tableSortColumn),
                     sortAscending: provider.tableSortAscending,
                     showCheckboxColumn: false,
                     headingRowColor: WidgetStateProperty.all(
@@ -318,57 +463,14 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
                     dataRowMinHeight: 52,
                     dataRowMaxHeight: 60,
                     columnSpacing: 16,
-                    columns: [
-                      DataColumn(
-                        label: const Text('Name',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        onSort: (_, asc) => provider.setTableSort('name', asc),
-                      ),
-                      DataColumn(
-                        label: const Text('Breed',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        onSort: (_, asc) => provider.setTableSort('breed', asc),
-                      ),
-                      const DataColumn(
-                        label: Text('Sex',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      DataColumn(
-                        label: const Text('DOB',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        onSort: (_, asc) =>
-                            provider.setTableSort('date_of_birth', asc),
-                      ),
-                      const DataColumn(
-                        label: Text('Status',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      const DataColumn(
-                        label: Text('Reg #',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                      DataColumn(
-                        label: const Text('Added',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                        onSort: (_, asc) =>
-                            provider.setTableSort('created_at', asc),
-                      ),
-                    ],
+                    columns: _buildColumns(provider),
                     rows: provider.tableAnimals.map((animal) {
                       return DataRow(
                         onSelectChanged: (_) {
                           Navigator.pushNamed(
                               context, '/animals/${animal.id}');
                         },
-                        cells: [
-                          DataCell(_buildNameCell(animal)),
-                          DataCell(Text(animal.breed)),
-                          DataCell(_buildSexChip(animal.sex)),
-                          DataCell(Text(animal.ageDisplay ?? '\u2014')),
-                          DataCell(_buildStatusChip(animal.status)),
-                          DataCell(Text(animal.registrationNumber ?? '\u2014')),
-                          DataCell(Text(_formatDate(animal.createdAt))),
-                        ],
+                        cells: _buildCells(animal),
                       );
                     }).toList(),
                   ),
@@ -390,6 +492,51 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
       ],
     );
   }
+
+  List<DataColumn> _buildColumns(AnimalProvider provider) {
+    return _visibleColumns.map((col) {
+      final def = _columnDefs[col]!;
+      return DataColumn(
+        label: Text(def.label,
+            style: const TextStyle(fontWeight: FontWeight.bold)),
+        onSort: def.sortField != null
+            ? (_, asc) => provider.setTableSort(def.sortField!, asc)
+            : null,
+      );
+    }).toList();
+  }
+
+  List<DataCell> _buildCells(Animal animal) {
+    return _visibleColumns.map((col) {
+      return switch (col) {
+        AnimalColumn.name => DataCell(_buildNameCell(animal)),
+        AnimalColumn.species => DataCell(Text(animal.species)),
+        AnimalColumn.breed => DataCell(Text(animal.breed)),
+        AnimalColumn.sex => DataCell(_buildSexChip(animal.sex)),
+        AnimalColumn.dob => DataCell(Text(animal.ageDisplay ?? '\u2014')),
+        AnimalColumn.status => DataCell(_buildStatusChip(animal.status)),
+        AnimalColumn.color => DataCell(Text(animal.color ?? '\u2014')),
+        AnimalColumn.regNumber =>
+          DataCell(Text(animal.registrationNumber ?? '\u2014')),
+        AnimalColumn.microchip =>
+          DataCell(Text(animal.microchipNumber ?? '\u2014')),
+        AnimalColumn.added => DataCell(Text(_formatDate(animal.createdAt))),
+      };
+    }).toList();
+  }
+
+  /// Returns the index within visible columns that matches the current sort,
+  /// or null if the sort column isn't visible.
+  int? _activeSortIndex(String sortColumn) {
+    for (var i = 0; i < _visibleColumns.length; i++) {
+      if (_columnDefs[_visibleColumns[i]]!.sortField == sortColumn) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  // ─── Cell widgets ────────────────────────────────────────────────
 
   Widget _buildNameCell(Animal animal) {
     return Row(
@@ -446,7 +593,8 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(label,
-          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
+          style: TextStyle(
+              fontSize: 12, color: color, fontWeight: FontWeight.w500)),
     );
   }
 
@@ -470,22 +618,13 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(label,
-          style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
+          style: TextStyle(
+              fontSize: 12, color: color, fontWeight: FontWeight.w500)),
     );
   }
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  int? _sortColumnIndex(String column) {
-    return switch (column) {
-      'name' => 0,
-      'breed' => 1,
-      'date_of_birth' => 3,
-      'created_at' => 6,
-      _ => null,
-    };
   }
 
   Widget _buildPaginationControls(AnimalProvider provider) {

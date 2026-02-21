@@ -23,6 +23,7 @@ class AnimalDetailScreen extends StatefulWidget {
 class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _fetchingAnimal = false;
 
   @override
   void initState() {
@@ -30,6 +31,10 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     _tabController = TabController(length: 9, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<AnimalProvider>();
+      // If the animal isn't in the local cache, fetch it from the API.
+      if (p.getAnimalById(widget.animalId) == null) {
+        _fetchFromApi(p);
+      }
       p.loadHealthRecords(widget.animalId);
       p.loadAnimalImages(widget.animalId);
       p.loadWeightRecords(widget.animalId);
@@ -37,6 +42,12 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       p.loadFinancialRecords(widget.animalId);
       p.loadDocumentAttachments(widget.animalId);
     });
+  }
+
+  Future<void> _fetchFromApi(AnimalProvider provider) async {
+    setState(() => _fetchingAnimal = true);
+    await provider.fetchAnimalById(widget.animalId);
+    if (mounted) setState(() => _fetchingAnimal = false);
   }
 
   @override
@@ -53,7 +64,11 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
         if (animal == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('Animal')),
-            body: const Center(child: Text('Animal not found')),
+            body: Center(
+              child: _fetchingAnimal
+                  ? const CircularProgressIndicator()
+                  : const Text('Animal not found'),
+            ),
           );
         }
 
