@@ -45,9 +45,25 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
   final Map<String, dynamic> _customFieldValues = {};
   final Map<String, TextEditingController> _customFieldControllers = {};
 
+  // Parent typeahead controllers and state
+  final _sireSearchController = TextEditingController();
+  final _damSearchController = TextEditingController();
+  final _sireFocusNode = FocusNode();
+  final _damFocusNode = FocusNode();
+  bool _sireShowSuggestions = false;
+  bool _damShowSuggestions = false;
+
   @override
   void initState() {
     super.initState();
+    _sireFocusNode.addListener(() {
+      setState(() => _sireShowSuggestions = _sireFocusNode.hasFocus);
+    });
+    _damFocusNode.addListener(() {
+      setState(() => _damShowSuggestions = _damFocusNode.hasFocus);
+    });
+    _sireSearchController.addListener(() => setState(() {}));
+    _damSearchController.addListener(() => setState(() {}));
     if (widget.animalId != null) {
       _isEditing = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -80,6 +96,15 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _notesController.text = animal.notes ?? '';
     _selectedSireId = animal.sireId;
     _selectedDamId = animal.damId;
+    // Set parent search display text
+    if (animal.sireId != null) {
+      final sire = provider.getAnimalById(animal.sireId!);
+      if (sire != null) _sireSearchController.text = _formatAnimalDisplay(sire);
+    }
+    if (animal.damId != null) {
+      final dam = provider.getAnimalById(animal.damId!);
+      if (dam != null) _damSearchController.text = _formatAnimalDisplay(dam);
+    }
     // Load custom field values
     _customFieldValues.addAll(animal.customFields);
     for (final entry in animal.customFields.entries) {
@@ -108,6 +133,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _weightController.dispose();
     _heightController.dispose();
     _notesController.dispose();
+    _sireSearchController.dispose();
+    _damSearchController.dispose();
+    _sireFocusNode.dispose();
+    _damFocusNode.dispose();
     for (final c in _customFieldControllers.values) {
       c.dispose();
     }
@@ -290,20 +319,46 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                 const SizedBox(height: 24),
                 _buildSectionTitle('Parentage'),
                 const SizedBox(height: 8),
-                _buildParentAutocomplete(
+                _buildParentTypeahead(
                   label: 'Sire (Father)',
                   icon: Icons.male,
                   selectedId: _selectedSireId,
                   allAnimals: provider.maleAnimals,
-                  onSelected: (id) => setState(() => _selectedSireId = id),
+                  controller: _sireSearchController,
+                  focusNode: _sireFocusNode,
+                  showSuggestions: _sireShowSuggestions,
+                  onSelected: (animal) => setState(() {
+                    _selectedSireId = animal.id;
+                    _sireSearchController.text =
+                        _formatAnimalDisplay(animal);
+                    _sireShowSuggestions = false;
+                    _sireFocusNode.unfocus();
+                  }),
+                  onCleared: () => setState(() {
+                    _selectedSireId = null;
+                    _sireSearchController.clear();
+                  }),
                 ),
                 const SizedBox(height: 12),
-                _buildParentAutocomplete(
+                _buildParentTypeahead(
                   label: 'Dam (Mother)',
                   icon: Icons.female,
                   selectedId: _selectedDamId,
                   allAnimals: provider.femaleAnimals,
-                  onSelected: (id) => setState(() => _selectedDamId = id),
+                  controller: _damSearchController,
+                  focusNode: _damFocusNode,
+                  showSuggestions: _damShowSuggestions,
+                  onSelected: (animal) => setState(() {
+                    _selectedDamId = animal.id;
+                    _damSearchController.text =
+                        _formatAnimalDisplay(animal);
+                    _damShowSuggestions = false;
+                    _damFocusNode.unfocus();
+                  }),
+                  onCleared: () => setState(() {
+                    _selectedDamId = null;
+                    _damSearchController.clear();
+                  }),
                 ),
 
                 const SizedBox(height: 24),
@@ -813,128 +868,111 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     return '${a.name} (${a.breed})';
   }
 
-  /// Builds a typeahead autocomplete field for selecting a parent animal.
-  /// Users can search by name or registration number.
-  Widget _buildParentAutocomplete({
+  /// Builds an inline typeahead field for selecting a parent animal.
+  /// Renders suggestions directly in the form (not via overlay) so they
+  /// are always visible inside the scrollable ListView.
+  Widget _buildParentTypeahead({
     required String label,
     required IconData icon,
     required String? selectedId,
     required List<Animal> allAnimals,
-    required ValueChanged<String?> onSelected,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required bool showSuggestions,
+    required ValueChanged<Animal> onSelected,
+    required VoidCallback onCleared,
   }) {
-    // Resolve the currently selected animal for display
-    final selectedAnimal = selectedId != null
-        ? allAnimals.cast<Animal?>().firstWhere(
-              (a) => a!.id == selectedId,
-              orElse: () => null,
-            )
-        : null;
+    // Determine the search query: if a parent is already selected and the
+    // text matches the display string, treat it as no active search.
+    String query = controller.text;
+    if (selectedId != null) {
+      final sel = allAnimals.cast<Animal?>().firstWhere(
+            (a) => a!.id == selectedId,
+            orElse: () => null,
+          );
+      if (sel != null && query == _formatAnimalDisplay(sel)) {
+        query = '';
+      }
+    }
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Autocomplete<Animal>(
-                displayStringForOption: _formatAnimalDisplay,
-                initialValue: selectedAnimal != null
-                    ? TextEditingValue(
-                        text: _formatAnimalDisplay(selectedAnimal))
-                    : TextEditingValue.empty,
-                optionsBuilder: (TextEditingValue textEditingValue) {
-                  // All filtering (species, breed, DOB, search query)
-                  // happens here so it always uses the latest form state.
-                  return _filterParentCandidates(
-                    allAnimals,
-                    textEditingValue.text,
-                  );
-                },
-                onSelected: (Animal animal) {
-                  onSelected(animal.id);
-                },
-                fieldViewBuilder: (context, textController, focusNode,
-                    onFieldSubmitted) {
-                  return TextFormField(
-                    controller: textController,
-                    focusNode: focusNode,
-                    decoration: InputDecoration(
-                      labelText: label,
-                      prefixIcon: Icon(icon),
-                      hintText: 'Type name or reg number to search...',
-                      suffixIcon: selectedId != null
-                          ? IconButton(
-                              icon: const Icon(Icons.clear),
-                              tooltip: 'Clear selection',
-                              onPressed: () {
-                                textController.clear();
-                                onSelected(null);
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (value) {
-                      // If the user clears the text manually, clear the selection
-                      if (value.isEmpty && selectedId != null) {
-                        onSelected(null);
-                      }
-                    },
-                  );
-                },
-                optionsViewBuilder: (context, onAutoSelected, options) {
-                  return Align(
-                    alignment: Alignment.topLeft,
-                    child: Material(
-                      elevation: 4,
-                      borderRadius: BorderRadius.circular(8),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxHeight: 240,
-                          maxWidth: constraints.maxWidth,
-                        ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: options.length,
-                          itemBuilder: (context, index) {
-                            final animal = options.elementAt(index);
-                            return ListTile(
-                              dense: true,
-                              leading: Icon(
-                                icon,
-                                size: 20,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              title: Text(
-                                animal.name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Text(
-                                [
-                                  if (animal.registrationNumber != null &&
-                                      animal.registrationNumber!.isNotEmpty)
-                                    'Reg: ${animal.registrationNumber}',
-                                  animal.breed,
-                                ].join(' · '),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                              onTap: () => onAutoSelected(animal),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+    final suggestions = _filterParentCandidates(allAnimals, query);
+    final shouldShow = showSuggestions && selectedId == null && suggestions.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: Icon(icon),
+            hintText: 'Type name or reg number to search...',
+            suffixIcon: selectedId != null
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: 'Clear selection',
+                    onPressed: onCleared,
+                  )
+                : null,
+          ),
+          onChanged: (value) {
+            if (value.isEmpty && selectedId != null) {
+              onCleared();
+            }
+          },
+        ),
+        if (shouldShow)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            margin: const EdgeInsets.only(top: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-          ],
-        );
-      },
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: suggestions.length,
+              itemBuilder: (context, index) {
+                final animal = suggestions[index];
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    icon,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  title: Text(
+                    animal.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    [
+                      if (animal.registrationNumber != null &&
+                          animal.registrationNumber!.isNotEmpty)
+                        'Reg: ${animal.registrationNumber}',
+                      animal.breed,
+                    ].join(' · '),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  onTap: () => onSelected(animal),
+                );
+              },
+            ),
+          ),
+      ],
     );
   }
 
