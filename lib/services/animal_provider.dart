@@ -434,6 +434,15 @@ class AnimalProvider extends ChangeNotifier {
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
+    // Push the update to the remote API so pedigree and other changes persist.
+    if (isLoggedIn) {
+      try {
+        await _api.updateAnimal(animal);
+      } catch (_) {
+        // API unreachable — save locally, will sync later.
+      }
+    }
+
     await _db.updateAnimal(animal);
     _animals = await _db.getAllAnimals();
     notifyListeners();
