@@ -697,10 +697,47 @@ class AnimalProvider extends ChangeNotifier {
         maxGenerations: maxGenerations);
   }
 
+  /// Fetch breeding suggestions, preferring the backend API (which works on
+  /// web and has the full dataset) and falling back to the local genetics
+  /// service when the API is unavailable.
   Future<List<BreedingSuggestion>> getBreedingSuggestions(
     String animalId,
   ) async {
-    return await _genetics.generateBreedingSuggestions(animalId);
+    // Try the API first — it works on web and has the full dataset
+    try {
+      final rawSuggestions = await _api.getBreedingSuggestions(animalId);
+      if (rawSuggestions.isNotEmpty) {
+        return rawSuggestions
+            .map((m) => BreedingSuggestion.fromApi(m))
+            .toList();
+      }
+    } catch (_) {
+      // API unavailable — fall through to local
+    }
+
+    // Fallback to local genetics service (mobile with local DB)
+    try {
+      return await _genetics.generateBreedingSuggestions(animalId);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Load the full list of animals for breeding candidate selection.
+  /// On web/demo mode the in-memory list may only have a few recent animals,
+  /// so this fetches the complete list from the API.
+  Future<List<Animal>> loadBreedingCandidates() async {
+    if (_animals.length > 10) return _animals;
+    try {
+      final all = await _api.getAllAnimals();
+      if (all.length > _animals.length) {
+        _animals = all;
+        notifyListeners();
+      }
+      return _animals;
+    } catch (_) {
+      return _animals;
+    }
   }
 
   Future<double> calculateCOI(String sireId, String damId) async {
