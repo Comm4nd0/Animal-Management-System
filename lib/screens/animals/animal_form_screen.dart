@@ -216,15 +216,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _notesController.text = animal.notes ?? '';
     _selectedSireId = animal.sireId;
     _selectedDamId = animal.damId;
-    // Set parent search display text
-    if (animal.sireId != null) {
-      final sire = provider.getAnimalById(animal.sireId!);
-      if (sire != null) _sireSearchController.text = _formatAnimalDisplay(sire);
-    }
-    if (animal.damId != null) {
-      final dam = provider.getAnimalById(animal.damId!);
-      if (dam != null) _damSearchController.text = _formatAnimalDisplay(dam);
-    }
+    // Set parent search display text, fetching from API if not in memory
+    _loadParentDisplayText(provider, animal);
     // Load custom field values
     _customFieldValues.addAll(animal.customFields);
     for (final entry in animal.customFields.entries) {
@@ -233,6 +226,32 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       }
     }
     setState(() {});
+  }
+
+  /// Loads parent display text, fetching from API if the parent animal
+  /// isn't already in memory.
+  Future<void> _loadParentDisplayText(
+    AnimalProvider provider,
+    Animal animal,
+  ) async {
+    if (animal.sireId != null) {
+      var sire = provider.getAnimalById(animal.sireId!);
+      if (sire == null) {
+        sire = await provider.fetchAnimalById(animal.sireId!);
+      }
+      if (sire != null && mounted) {
+        _sireSearchController.text = _formatAnimalDisplay(sire);
+      }
+    }
+    if (animal.damId != null) {
+      var dam = provider.getAnimalById(animal.damId!);
+      if (dam == null) {
+        dam = await provider.fetchAnimalById(animal.damId!);
+      }
+      if (dam != null && mounted) {
+        _damSearchController.text = _formatAnimalDisplay(dam);
+      }
+    }
   }
 
   TextEditingController _getOrCreateController(String key) {

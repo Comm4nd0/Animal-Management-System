@@ -35,10 +35,13 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     _tabController = TabController(length: 8, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final p = context.read<AnimalProvider>();
-      // If the animal isn't in the local cache, fetch it from the API.
-      if (p.getAnimalById(widget.animalId) == null) {
-        _fetchFromApi(p);
-      }
+      // Always fetch the full animal from the API to ensure we have
+      // complete data (including sire/dam IDs that the list endpoint
+      // may not provide).
+      _fetchFromApi(p).then((_) {
+        if (!mounted) return;
+        _ensureParentsLoaded(p);
+      });
       p.loadHealthRecords(widget.animalId);
       p.loadAnimalImages(widget.animalId);
       p.loadWeightRecords(widget.animalId);
@@ -174,6 +177,23 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     if (mounted) setState(() => _fetchingAnimal = false);
   }
 
+  /// Fetches the sire and dam animals from the API if they are referenced
+  /// but not yet loaded into memory. This ensures parent names display
+  /// correctly on the detail screen.
+  Future<void> _ensureParentsLoaded(AnimalProvider provider) async {
+    final animal = provider.getAnimalById(widget.animalId);
+    if (animal == null) return;
+
+    final futures = <Future>[];
+    if (animal.sireId != null && provider.getAnimalById(animal.sireId!) == null) {
+      futures.add(provider.fetchAnimalById(animal.sireId!));
+    }
+    if (animal.damId != null && provider.getAnimalById(animal.damId!) == null) {
+      futures.add(provider.fetchAnimalById(animal.damId!));
+    }
+    if (futures.isNotEmpty) await Future.wait(futures);
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -219,6 +239,8 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                   if (!mounted) return;
                   final p = context.read<AnimalProvider>();
                   await p.fetchAnimalById(widget.animalId);
+                  if (!mounted) return;
+                  await _ensureParentsLoaded(p);
                   if (mounted) _loadPedigreeTree();
                 },
               ),
