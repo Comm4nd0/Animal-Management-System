@@ -434,18 +434,31 @@ class AnimalProvider extends ChangeNotifier {
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
-    // Push the update to the remote API so pedigree and other changes persist.
-    if (isLoggedIn) {
+    if (kIsWeb) {
+      // Web: sqflite is not available, persist via API only.
       try {
-        await _api.updateAnimal(animal);
-      } catch (_) {
-        // API unreachable — save locally, will sync later.
+        final updated = await _api.updateAnimal(animal);
+        final idx = _animals.indexWhere((a) => a.id == animal.id);
+        if (idx >= 0) {
+          _animals[idx] = updated;
+        }
+        notifyListeners();
+      } catch (e) {
+        return 'Failed to update animal. Please try again.';
       }
+    } else {
+      // Mobile: push to API if online, then save to local DB.
+      if (isLoggedIn) {
+        try {
+          await _api.updateAnimal(animal);
+        } catch (_) {
+          // API unreachable — save locally, will sync later.
+        }
+      }
+      await _db.updateAnimal(animal);
+      _animals = await _db.getAllAnimals();
+      notifyListeners();
     }
-
-    await _db.updateAnimal(animal);
-    _animals = await _db.getAllAnimals();
-    notifyListeners();
     return null;
   }
 

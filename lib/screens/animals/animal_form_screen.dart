@@ -198,7 +198,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _selectedSpecies = animal.species;
     _breedController.text = animal.breed;
     _selectedSex = animal.sex;
-    _selectedStatus = animal.status;
+    _selectedStatus = (animal.status == AnimalStatus.alive ||
+            animal.status == AnimalStatus.deceased)
+        ? animal.status
+        : AnimalStatus.alive;
     _dateOfBirth = animal.dateOfBirth;
     _dateOfDeath = animal.dateOfDeath;
     _colorController.text = animal.color ?? '';
@@ -393,11 +396,6 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                         value: AnimalStatus.alive, child: Text('Alive')),
                     DropdownMenuItem(
                         value: AnimalStatus.deceased, child: Text('Deceased')),
-                    DropdownMenuItem(
-                        value: AnimalStatus.sold, child: Text('Sold')),
-                    DropdownMenuItem(
-                        value: AnimalStatus.transferred,
-                        child: Text('Transferred')),
                   ],
                   onChanged: (v) {
                     setState(() {
@@ -409,31 +407,32 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     });
                   },
                 ),
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: Icon(Icons.event_busy,
-                      color: _dateOfDeath != null ? Colors.red.shade400 : null),
-                  title: Text(_dateOfDeath != null
-                      ? DateFormat('dd MMM yyyy').format(_dateOfDeath!)
-                      : 'Date of Death'),
-                  subtitle: _dateOfDeath == null
-                      ? const Text('Tap to select')
-                      : null,
-                  trailing: _dateOfDeath != null
-                      ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () => setState(() {
-                            _dateOfDeath = null;
-                            _selectedStatus = AnimalStatus.alive;
-                          }),
-                        )
-                      : null,
-                  onTap: _pickDateOfDeath,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(color: Colors.grey.shade400),
+                if (_selectedStatus == AnimalStatus.deceased) ...[
+                  const SizedBox(height: 12),
+                  ListTile(
+                    leading: Icon(Icons.event_busy,
+                        color: _dateOfDeath != null ? Colors.red.shade400 : null),
+                    title: Text(_dateOfDeath != null
+                        ? DateFormat('dd MMM yyyy').format(_dateOfDeath!)
+                        : 'Date of Death'),
+                    subtitle: _dateOfDeath == null
+                        ? const Text('Tap to select')
+                        : null,
+                    trailing: _dateOfDeath != null
+                        ? IconButton(
+                            icon: const Icon(Icons.clear),
+                            onPressed: () => setState(() {
+                              _dateOfDeath = null;
+                            }),
+                          )
+                        : null,
+                    onTap: _pickDateOfDeath,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: Colors.grey.shade400),
+                    ),
                   ),
-                ),
+                ],
 
                 const SizedBox(height: 24),
                 _buildSectionTitle('Parentage'),
@@ -672,7 +671,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   child: ElevatedButton(
                     onPressed: () async {
                       if (!await guardWriteAction(context)) return;
-                      _saveAnimal();
+                      await _saveAnimal();
                     },
                     child: Text(_isEditing ? 'Update Animal' : 'Add Animal'),
                   ),
