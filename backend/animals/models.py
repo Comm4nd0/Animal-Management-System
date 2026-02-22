@@ -436,8 +436,8 @@ class AnimalImage(models.Model):
 
 class CustomFieldDefinition(models.Model):
     """
-    Defines a custom field that a user can create for their animals,
-    contacts (breeders/owners), or pedigree records.
+    Defines a custom field that a user can create for their animals
+    or contacts (breeders/owners).
     The actual values are stored in the respective model's custom_fields JSONField.
     """
 
@@ -451,7 +451,6 @@ class CustomFieldDefinition(models.Model):
     class EntityType(models.IntegerChoices):
         ANIMAL = 0, 'Animal'
         CONTACT = 1, 'Contact'
-        PEDIGREE = 2, 'Pedigree'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -474,6 +473,10 @@ class CustomFieldDefinition(models.Model):
         help_text='Which record type this field applies to',
     )
     required = models.BooleanField(default=False)
+    show_in_pedigree = models.BooleanField(
+        default=False,
+        help_text='Whether to display this field on pedigree tree cards (animal fields only)',
+    )
     options = models.JSONField(
         default=list,
         blank=True,

@@ -256,8 +256,13 @@ class Command(BaseCommand):
                 sire__account=profile,
             ).delete()
             Contact.objects.filter(account=profile).delete()
-            CustomFieldDefinition.objects.filter(owner=profile).delete()
-            self.stdout.write('  Cleared existing demo data.')
+            # Preserve user-created custom field definitions across resets.
+            # Only delete the seeded demo fields so they can be re-created fresh.
+            seeded_keys = ['ear_tag', 'horn_status', 'fleece_weight', 'temperament', 'reg_date']
+            CustomFieldDefinition.objects.filter(
+                owner=profile, field_key__in=seeded_keys,
+            ).delete()
+            self.stdout.write('  Cleared existing demo data (custom fields preserved).')
         except (User.DoesNotExist, UserProfile.DoesNotExist):
             pass
 
@@ -290,21 +295,23 @@ class Command(BaseCommand):
 
     def _create_custom_fields(self):
         fields = [
-            ('Ear Tag Number', 'ear_tag', CustomFieldDefinition.FieldType.TEXT, '', 1),
+            ('Ear Tag Number', 'ear_tag', CustomFieldDefinition.FieldType.TEXT, [], 1, True),
             ('Horn Status', 'horn_status', CustomFieldDefinition.FieldType.DROPDOWN,
-             'Polled,Horned,Scurred,Dehorned', 2),
-            ('Fleece Weight (kg)', 'fleece_weight', CustomFieldDefinition.FieldType.NUMBER, '', 3),
-            ('Temperament Score', 'temperament', CustomFieldDefinition.FieldType.NUMBER, '', 4),
-            ('Registration Date', 'reg_date', CustomFieldDefinition.FieldType.DATE, '', 5),
+             ['Polled', 'Horned', 'Scurred', 'Dehorned'], 2, False),
+            ('Fleece Weight (kg)', 'fleece_weight', CustomFieldDefinition.FieldType.NUMBER, [], 3, False),
+            ('Temperament Score', 'temperament', CustomFieldDefinition.FieldType.NUMBER, [], 4, False),
+            ('Registration Date', 'reg_date', CustomFieldDefinition.FieldType.DATE, [], 5, True),
         ]
-        for name, key, ftype, options, order in fields:
+        for name, key, ftype, options, order, pedigree in fields:
             CustomFieldDefinition.objects.get_or_create(
                 field_key=key,
                 owner=self.profile,
+                entity_type=CustomFieldDefinition.EntityType.ANIMAL,
                 defaults={
                     'name': name,
                     'field_type': ftype,
                     'required': False,
+                    'show_in_pedigree': pedigree,
                     'options': options,
                     'display_order': order,
                 },

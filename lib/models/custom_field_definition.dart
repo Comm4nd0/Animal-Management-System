@@ -12,7 +12,6 @@ enum CustomFieldType {
 enum CustomFieldEntityType {
   animal,
   contact,
-  pedigree,
 }
 
 class CustomFieldDefinition {
@@ -22,6 +21,7 @@ class CustomFieldDefinition {
   final CustomFieldType fieldType;
   final CustomFieldEntityType entityType;
   final bool required;
+  final bool showInPedigree;
   final List<String> options;
   final int displayOrder;
   final DateTime createdAt;
@@ -34,6 +34,7 @@ class CustomFieldDefinition {
     this.fieldType = CustomFieldType.text,
     this.entityType = CustomFieldEntityType.animal,
     this.required = false,
+    this.showInPedigree = false,
     this.options = const [],
     this.displayOrder = 0,
     DateTime? createdAt,
@@ -72,8 +73,6 @@ class CustomFieldDefinition {
         return 'Animal';
       case CustomFieldEntityType.contact:
         return 'Contact';
-      case CustomFieldEntityType.pedigree:
-        return 'Pedigree';
     }
   }
 
@@ -83,6 +82,7 @@ class CustomFieldDefinition {
     CustomFieldType? fieldType,
     CustomFieldEntityType? entityType,
     bool? required,
+    bool? showInPedigree,
     List<String>? options,
     int? displayOrder,
   }) {
@@ -93,6 +93,7 @@ class CustomFieldDefinition {
       fieldType: fieldType ?? this.fieldType,
       entityType: entityType ?? this.entityType,
       required: required ?? this.required,
+      showInPedigree: showInPedigree ?? this.showInPedigree,
       options: options ?? this.options,
       displayOrder: displayOrder ?? this.displayOrder,
       createdAt: createdAt,
@@ -108,6 +109,7 @@ class CustomFieldDefinition {
       'fieldType': fieldType.index,
       'entityType': entityType.index,
       'required': required ? 1 : 0,
+      'showInPedigree': showInPedigree ? 1 : 0,
       'options': options.join('||'),
       'displayOrder': displayOrder,
       'createdAt': createdAt.millisecondsSinceEpoch,
@@ -124,6 +126,7 @@ class CustomFieldDefinition {
       entityType: CustomFieldEntityType
           .values[(map['entityType'] as int?) ?? 0],
       required: (map['required'] as int? ?? 0) == 1,
+      showInPedigree: (map['showInPedigree'] as int? ?? 0) == 1,
       options: (map['options'] as String?)?.isNotEmpty == true
           ? (map['options'] as String).split('||')
           : [],
@@ -142,8 +145,9 @@ class CustomFieldDefinition {
       fieldKey: m['field_key'] as String,
       fieldType: CustomFieldType.values[m['field_type'] as int? ?? 0],
       entityType: CustomFieldEntityType
-          .values[m['entity_type'] as int? ?? 0],
+          .values[(m['entity_type'] as int? ?? 0).clamp(0, 1)],
       required: m['required'] as bool? ?? false,
+      showInPedigree: m['show_in_pedigree'] as bool? ?? false,
       options: (m['options'] as List?)?.cast<String>() ?? [],
       displayOrder: m['display_order'] as int? ?? 0,
     );
@@ -155,6 +159,7 @@ class CustomFieldDefinition {
       'field_type': fieldType.index,
       'entity_type': entityType.index,
       'required': required,
+      'show_in_pedigree': showInPedigree,
       'options': options,
       'display_order': displayOrder,
     };
