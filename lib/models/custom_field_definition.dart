@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 enum CustomFieldType {
@@ -22,6 +23,9 @@ class CustomFieldDefinition {
   final CustomFieldEntityType entityType;
   final bool required;
   final bool showInPedigree;
+
+  /// Breeds this field applies to. Empty list means all breeds.
+  final List<String> applicableBreeds;
   final List<String> options;
   final int displayOrder;
   final DateTime createdAt;
@@ -35,6 +39,7 @@ class CustomFieldDefinition {
     this.entityType = CustomFieldEntityType.animal,
     this.required = false,
     this.showInPedigree = false,
+    this.applicableBreeds = const [],
     this.options = const [],
     this.displayOrder = 0,
     DateTime? createdAt,
@@ -50,6 +55,14 @@ class CustomFieldDefinition {
         .replaceAll(' ', '_')
         .replaceAll('-', '_')
         .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+  }
+
+  /// Whether this field applies to the given breed.
+  /// Returns true if [applicableBreeds] is empty (applies to all) or
+  /// if [breed] is in the list.
+  bool appliesTo(String breed) {
+    if (applicableBreeds.isEmpty) return true;
+    return applicableBreeds.contains(breed);
   }
 
   String get fieldTypeDisplay {
@@ -83,6 +96,7 @@ class CustomFieldDefinition {
     CustomFieldEntityType? entityType,
     bool? required,
     bool? showInPedigree,
+    List<String>? applicableBreeds,
     List<String>? options,
     int? displayOrder,
   }) {
@@ -94,12 +108,15 @@ class CustomFieldDefinition {
       entityType: entityType ?? this.entityType,
       required: required ?? this.required,
       showInPedigree: showInPedigree ?? this.showInPedigree,
+      applicableBreeds: applicableBreeds ?? this.applicableBreeds,
       options: options ?? this.options,
       displayOrder: displayOrder ?? this.displayOrder,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
   }
+
+  // ─── SQLite serialization ───────────────────────────────────
 
   Map<String, dynamic> toMap() {
     return {
@@ -110,6 +127,7 @@ class CustomFieldDefinition {
       'entityType': entityType.index,
       'required': required ? 1 : 0,
       'showInPedigree': showInPedigree ? 1 : 0,
+      'applicableBreeds': jsonEncode(applicableBreeds),
       'options': options.join('||'),
       'displayOrder': displayOrder,
       'createdAt': createdAt.millisecondsSinceEpoch,
@@ -127,6 +145,7 @@ class CustomFieldDefinition {
           .values[(map['entityType'] as int?) ?? 0],
       required: (map['required'] as int? ?? 0) == 1,
       showInPedigree: (map['showInPedigree'] as int? ?? 0) == 1,
+      applicableBreeds: _decodeStringList(map['applicableBreeds']),
       options: (map['options'] as String?)?.isNotEmpty == true
           ? (map['options'] as String).split('||')
           : [],
@@ -138,6 +157,8 @@ class CustomFieldDefinition {
     );
   }
 
+  // ─── API serialization ─────────────────────────────────────
+
   factory CustomFieldDefinition.fromApi(Map<String, dynamic> m) {
     return CustomFieldDefinition(
       id: m['id'] as String,
@@ -148,6 +169,8 @@ class CustomFieldDefinition {
           .values[(m['entity_type'] as int? ?? 0).clamp(0, 1)],
       required: m['required'] as bool? ?? false,
       showInPedigree: m['show_in_pedigree'] as bool? ?? false,
+      applicableBreeds:
+          (m['applicable_breeds'] as List?)?.cast<String>() ?? [],
       options: (m['options'] as List?)?.cast<String>() ?? [],
       displayOrder: m['display_order'] as int? ?? 0,
     );
@@ -160,9 +183,24 @@ class CustomFieldDefinition {
       'entity_type': entityType.index,
       'required': required,
       'show_in_pedigree': showInPedigree,
+      'applicable_breeds': applicableBreeds,
       'options': options,
       'display_order': displayOrder,
     };
+  }
+
+  // ─── Helpers ───────────────────────────────────────────────
+
+  static List<String> _decodeStringList(dynamic value) {
+    if (value == null || value == '[]' || value == '') return [];
+    if (value is List) return value.cast<String>();
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) return decoded.cast<String>();
+      } catch (_) {}
+    }
+    return [];
   }
 
   @override

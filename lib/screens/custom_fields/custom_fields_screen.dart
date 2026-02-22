@@ -316,6 +316,19 @@ class _CustomFieldCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (field.applicableBreeds.isNotEmpty) ...[
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  field.applicableBreeds.join(', '),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.teal.shade600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ],
         ),
         trailing: Row(
@@ -374,6 +387,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
   CustomFieldType _selectedType = CustomFieldType.text;
   bool _required = false;
   bool _showInPedigree = false;
+  List<String> _applicableBreeds = [];
   List<String> _options = [];
 
   @override
@@ -384,6 +398,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
       _selectedType = widget.field!.fieldType;
       _required = widget.field!.required;
       _showInPedigree = widget.field!.showInPedigree;
+      _applicableBreeds = List.from(widget.field!.applicableBreeds);
       _options = List.from(widget.field!.options);
     }
   }
@@ -441,7 +456,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
                   onChanged: (v) => setState(() => _required = v),
                   contentPadding: EdgeInsets.zero,
                 ),
-                if (widget.entityType == CustomFieldEntityType.animal)
+                if (widget.entityType == CustomFieldEntityType.animal) ...[
                   SwitchListTile(
                     title: const Text('Show in Pedigree'),
                     subtitle: const Text(
@@ -450,6 +465,8 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
                     onChanged: (v) => setState(() => _showInPedigree = v),
                     contentPadding: EdgeInsets.zero,
                   ),
+                  _buildBreedPicker(context),
+                ],
                 if (_selectedType == CustomFieldType.dropdown) ...[
                   const Divider(),
                   Text(
@@ -552,6 +569,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
             fieldType: _selectedType,
             required: _required,
             showInPedigree: _showInPedigree,
+            applicableBreeds: _applicableBreeds,
             options: _options,
           )
         : CustomFieldDefinition(
@@ -560,11 +578,73 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
             entityType: widget.entityType,
             required: _required,
             showInPedigree: _showInPedigree,
+            applicableBreeds: _applicableBreeds,
             options: _options,
           );
 
     widget.onSave(field);
     Navigator.pop(context);
+  }
+
+  Widget _buildBreedPicker(BuildContext context) {
+    final provider = context.read<AnimalProvider>();
+    final allBreeds = provider.availableBreeds;
+
+    // Nothing to filter if only one breed in use
+    if (allBreeds.length <= 1) return const SizedBox.shrink();
+
+    final isAllBreeds = _applicableBreeds.isEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        Text(
+          'Applicable Breeds',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          isAllBreeds
+              ? 'Applies to all breeds'
+              : 'Only applies to selected breeds',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            FilterChip(
+              label: const Text('All Breeds'),
+              selected: isAllBreeds,
+              onSelected: (_) {
+                setState(() => _applicableBreeds = []);
+              },
+            ),
+            ...allBreeds.map((breed) {
+              final selected = _applicableBreeds.contains(breed);
+              return FilterChip(
+                label: Text(breed),
+                selected: selected,
+                onSelected: (checked) {
+                  setState(() {
+                    if (checked) {
+                      _applicableBreeds.add(breed);
+                    } else {
+                      _applicableBreeds.remove(breed);
+                    }
+                  });
+                },
+              );
+            }),
+          ],
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
   }
 
   String _entityLabel(CustomFieldEntityType type) {

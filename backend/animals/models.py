@@ -477,6 +477,11 @@ class CustomFieldDefinition(models.Model):
         default=False,
         help_text='Whether to display this field on pedigree tree cards (animal fields only)',
     )
+    applicable_breeds = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Breeds this field applies to. Empty list means all breeds.',
+    )
     options = models.JSONField(
         default=list,
         blank=True,

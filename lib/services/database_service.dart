@@ -143,6 +143,7 @@ class DatabaseService {
         entityType INTEGER NOT NULL DEFAULT 0,
         required INTEGER NOT NULL DEFAULT 0,
         showInPedigree INTEGER NOT NULL DEFAULT 0,
+        applicableBreeds TEXT DEFAULT '[]',
         options TEXT DEFAULT '',
         displayOrder INTEGER DEFAULT 0,
         createdAt INTEGER NOT NULL,
@@ -198,6 +199,8 @@ class DatabaseService {
           'ALTER TABLE custom_field_definitions ADD COLUMN entityType INTEGER NOT NULL DEFAULT 0');
       await db.execute(
           'ALTER TABLE custom_field_definitions ADD COLUMN showInPedigree INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE custom_field_definitions ADD COLUMN applicableBreeds TEXT DEFAULT \'[]\'');
       await db.execute(
           'ALTER TABLE contacts ADD COLUMN customFields TEXT DEFAULT \'{}\'');
       // Recreate the unique index to include entityType

@@ -191,7 +191,8 @@ class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'field_key', 'field_type', 'field_type_display',
             'entity_type', 'entity_type_display',
-            'required', 'show_in_pedigree', 'options', 'display_order',
+            'required', 'show_in_pedigree', 'applicable_breeds',
+            'options', 'display_order',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'field_key', 'created_at', 'updated_at']

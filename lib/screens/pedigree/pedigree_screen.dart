@@ -389,11 +389,11 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
     final w = _cardWidth(generation);
     final h = _cardHeight(generation);
 
-    // Animal custom fields marked for pedigree display
+    // Animal custom fields marked for pedigree display, filtered by breed
     final pedigreeFields = context
         .read<AnimalProvider>()
         .customFieldDefinitionsFor(CustomFieldEntityType.animal)
-        .where((f) => f.showInPedigree)
+        .where((f) => f.showInPedigree && f.appliesTo(animal.breed))
         .toList();
     final pedigreeValues = <String>[];
     if (generation < 3) {
