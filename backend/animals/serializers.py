@@ -8,7 +8,8 @@ class ContactSerializer(serializers.ModelSerializer):
         model = Contact
         fields = [
             'id', 'name', 'farm_name', 'email', 'phone',
-            'address', 'prefix', 'notes', 'created_at', 'updated_at',
+            'address', 'prefix', 'notes', 'custom_fields',
+            'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -181,11 +182,15 @@ class CustomFieldDefinitionSerializer(serializers.ModelSerializer):
     field_type_display = serializers.CharField(
         source='get_field_type_display', read_only=True
     )
+    entity_type_display = serializers.CharField(
+        source='get_entity_type_display', read_only=True
+    )
 
     class Meta:
         model = CustomFieldDefinition
         fields = [
             'id', 'name', 'field_key', 'field_type', 'field_type_display',
+            'entity_type', 'entity_type_display',
             'required', 'options', 'display_order', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'field_key', 'created_at', 'updated_at']

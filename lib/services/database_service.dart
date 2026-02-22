@@ -19,7 +19,7 @@ class DatabaseService {
     final path = join(dbPath, 'pedigree_manager.db');
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -128,6 +128,7 @@ class DatabaseService {
         address TEXT DEFAULT '',
         prefix TEXT DEFAULT '',
         notes TEXT DEFAULT '',
+        customFields TEXT DEFAULT '{}',
         createdAt INTEGER NOT NULL,
         updatedAt INTEGER NOT NULL
       )
@@ -139,6 +140,7 @@ class DatabaseService {
         name TEXT NOT NULL,
         fieldKey TEXT NOT NULL,
         fieldType INTEGER NOT NULL DEFAULT 0,
+        entityType INTEGER NOT NULL DEFAULT 0,
         required INTEGER NOT NULL DEFAULT 0,
         options TEXT DEFAULT '',
         displayOrder INTEGER DEFAULT 0,
@@ -163,7 +165,7 @@ class DatabaseService {
     await db.execute(
         'CREATE INDEX idx_breeding_dam ON breeding_records (damId)');
     await db.execute(
-        'CREATE UNIQUE INDEX idx_custom_field_key ON custom_field_definitions (fieldKey)');
+        'CREATE UNIQUE INDEX idx_custom_field_key ON custom_field_definitions (fieldKey, entityType)');
 
     await _createAnimalImagesTable(db);
     await _createTeamMembersTable(db);
@@ -189,6 +191,17 @@ class DatabaseService {
     if (oldVersion < 5) {
       await db.execute(
           'ALTER TABLE animals ADD COLUMN registrationDate INTEGER');
+    }
+    if (oldVersion < 6) {
+      await db.execute(
+          'ALTER TABLE custom_field_definitions ADD COLUMN entityType INTEGER NOT NULL DEFAULT 0');
+      await db.execute(
+          'ALTER TABLE contacts ADD COLUMN customFields TEXT DEFAULT \'{}\'');
+      // Recreate the unique index to include entityType
+      await db.execute(
+          'DROP INDEX IF EXISTS idx_custom_field_key');
+      await db.execute(
+          'CREATE UNIQUE INDEX idx_custom_field_key ON custom_field_definitions (fieldKey, entityType)');
     }
   }
 

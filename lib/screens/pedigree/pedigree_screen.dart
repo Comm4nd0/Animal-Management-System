@@ -389,6 +389,23 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
     final w = _cardWidth(generation);
     final h = _cardHeight(generation);
 
+    // Pedigree custom fields to display on the card
+    final pedigreeFields = context
+        .read<AnimalProvider>()
+        .customFieldDefinitionsFor(CustomFieldEntityType.pedigree);
+    final pedigreeValues = <String>[];
+    if (generation < 3) {
+      for (final def in pedigreeFields) {
+        final val = animal.customFields[def.fieldKey];
+        if (val != null && val.toString().isNotEmpty && val != false) {
+          final display = def.fieldType == CustomFieldType.boolean
+              ? (val == true || val == 'true' ? 'Yes' : 'No')
+              : val.toString();
+          pedigreeValues.add('${def.name}: $display');
+        }
+      }
+    }
+
     return GestureDetector(
       onTap: () {
         if (animal.id != widget.animalId) {
@@ -397,7 +414,7 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
       },
       child: Container(
         width: w,
-        height: h,
+        constraints: BoxConstraints(minHeight: h),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(8),
@@ -475,6 +492,15 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
+                      // Pedigree custom fields
+                      ...pedigreeValues.map((line) => Text(
+                            line,
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: Colors.indigo.shade400,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          )),
                     ],
                   ),
                 ),
