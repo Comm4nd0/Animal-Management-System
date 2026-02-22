@@ -211,10 +211,15 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                 icon: const Icon(Icons.edit),
                 onPressed: () async {
                   if (!await guardWriteAction(context)) return;
-                  Navigator.pushNamed(
+                  await Navigator.pushNamed(
                     context,
                     '/animals/${animal.id}/edit',
                   );
+                  // Refresh data after returning from edit.
+                  if (!mounted) return;
+                  final p = context.read<AnimalProvider>();
+                  await p.fetchAnimalById(widget.animalId);
+                  if (mounted) _loadPedigreeTree();
                 },
               ),
               PopupMenuButton<String>(

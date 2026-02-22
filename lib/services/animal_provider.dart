@@ -438,10 +438,7 @@ class AnimalProvider extends ChangeNotifier {
       // Web: sqflite is not available, persist via API only.
       try {
         final updated = await _api.updateAnimal(animal);
-        final idx = _animals.indexWhere((a) => a.id == animal.id);
-        if (idx >= 0) {
-          _animals[idx] = updated;
-        }
+        _upsertAnimalInMemory(updated);
         notifyListeners();
       } catch (e) {
         return 'Failed to update animal. Please try again.';
@@ -460,6 +457,21 @@ class AnimalProvider extends ChangeNotifier {
       notifyListeners();
     }
     return null;
+  }
+
+  /// Insert or replace an animal in the in-memory lists so the UI
+  /// reflects the latest data without a full reload.
+  void _upsertAnimalInMemory(Animal animal) {
+    final idx = _animals.indexWhere((a) => a.id == animal.id);
+    if (idx >= 0) {
+      _animals[idx] = animal;
+    } else {
+      _animals.add(animal);
+    }
+    final tableIdx = _tableAnimals.indexWhere((a) => a.id == animal.id);
+    if (tableIdx >= 0) {
+      _tableAnimals[tableIdx] = animal;
+    }
   }
 
   Future<void> deleteAnimal(String id) async {
