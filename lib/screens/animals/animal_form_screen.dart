@@ -641,8 +641,8 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   ),
                 ),
 
-                // Custom Fields section
-                if (provider.customFieldDefinitions.isNotEmpty) ...[
+                // Custom Fields section (animal-type only)
+                if (provider.customFieldDefinitionsFor(CustomFieldEntityType.animal).isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -662,7 +662,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ...provider.customFieldDefinitions.map(
+                  ...provider.customFieldDefinitionsFor(CustomFieldEntityType.animal).map(
                     (field) => _buildCustomField(field),
                   ),
                 ],
@@ -1327,9 +1327,9 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       }
     }
 
-    // Collect custom field values from controllers
+    // Collect custom field values from controllers (animal-type only)
     final customFields = <String, dynamic>{};
-    for (final fieldDef in provider.customFieldDefinitions) {
+    for (final fieldDef in provider.customFieldDefinitionsFor(CustomFieldEntityType.animal)) {
       final key = fieldDef.fieldKey;
       if (fieldDef.fieldType == CustomFieldType.text ||
           fieldDef.fieldType == CustomFieldType.number) {

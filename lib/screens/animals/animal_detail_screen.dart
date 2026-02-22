@@ -393,7 +393,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     Animal? dam,
   ) {
     final provider = context.read<AnimalProvider>();
-    final customFieldDefs = provider.customFieldDefinitions;
+    final customFieldDefs = provider.customFieldDefinitionsFor(CustomFieldEntityType.animal);
 
     return ListView(
       padding: const EdgeInsets.all(16),

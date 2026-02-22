@@ -528,23 +528,71 @@ class AnimalProvider extends ChangeNotifier {
 
   Future<void> addContact(Contact contact) async {
     if (!canWrite) return;
-    await _db.insertContact(contact);
-    _contacts = await _db.getAllContacts();
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createContact(contact);
+        _contacts.add(created);
+        notifyListeners();
+      } catch (e) {
+        rethrow;
+      }
+    } else {
+      if (isLoggedIn) {
+        try {
+          await _api.createContact(contact);
+        } catch (_) {}
+      }
+      await _db.insertContact(contact);
+      _contacts = await _db.getAllContacts();
+      notifyListeners();
+    }
   }
 
   Future<void> updateContact(Contact contact) async {
     if (!canWrite) return;
-    await _db.updateContact(contact);
-    _contacts = await _db.getAllContacts();
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final updated = await _api.updateContact(contact);
+        final idx = _contacts.indexWhere((c) => c.id == contact.id);
+        if (idx >= 0) {
+          _contacts[idx] = updated;
+        }
+        notifyListeners();
+      } catch (e) {
+        rethrow;
+      }
+    } else {
+      if (isLoggedIn) {
+        try {
+          await _api.updateContact(contact);
+        } catch (_) {}
+      }
+      await _db.updateContact(contact);
+      _contacts = await _db.getAllContacts();
+      notifyListeners();
+    }
   }
 
   Future<void> deleteContact(String id) async {
     if (!canWrite) return;
-    await _db.deleteContact(id);
-    _contacts = await _db.getAllContacts();
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteContact(id);
+        _contacts.removeWhere((c) => c.id == id);
+        notifyListeners();
+      } catch (e) {
+        rethrow;
+      }
+    } else {
+      if (isLoggedIn) {
+        try {
+          await _api.deleteContact(id);
+        } catch (_) {}
+      }
+      await _db.deleteContact(id);
+      _contacts = await _db.getAllContacts();
+      notifyListeners();
+    }
   }
 
   // ─── Health Records ───────────────────────────────────────────
@@ -747,49 +795,130 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Custom Field Definitions ────────────────────────────────
 
   Future<void> loadCustomFieldDefinitions() async {
-    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+    if (kIsWeb) {
+      try {
+        _customFieldDefinitions = await _api.getCustomFieldDefinitions();
+      } catch (_) {
+        _customFieldDefinitions = [];
+      }
+    } else {
+      _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+    }
     notifyListeners();
+  }
+
+  /// Returns custom field definitions filtered by entity type.
+  List<CustomFieldDefinition> customFieldDefinitionsFor(
+      CustomFieldEntityType entityType) {
+    return _customFieldDefinitions
+        .where((f) => f.entityType == entityType)
+        .toList();
   }
 
   Future<void> addCustomFieldDefinition(CustomFieldDefinition field) async {
     if (!canWrite) return;
-    await _db.insertCustomFieldDefinition(field);
-    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createCustomFieldDefinition(field);
+        _customFieldDefinitions.add(created);
+        notifyListeners();
+      } catch (e) {
+        rethrow;
+      }
+    } else {
+      if (isLoggedIn) {
+        try {
+          await _api.createCustomFieldDefinition(field);
+        } catch (_) {}
+      }
+      await _db.insertCustomFieldDefinition(field);
+      _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+      notifyListeners();
+    }
   }
 
   Future<void> updateCustomFieldDefinition(CustomFieldDefinition field) async {
     if (!canWrite) return;
-    await _db.updateCustomFieldDefinition(field);
-    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final updated = await _api.updateCustomFieldDefinition(field);
+        final idx = _customFieldDefinitions.indexWhere((f) => f.id == field.id);
+        if (idx >= 0) {
+          _customFieldDefinitions[idx] = updated;
+        }
+        notifyListeners();
+      } catch (e) {
+        rethrow;
+      }
+    } else {
+      if (isLoggedIn) {
+        try {
+          await _api.updateCustomFieldDefinition(field);
+        } catch (_) {}
+      }
+      await _db.updateCustomFieldDefinition(field);
+      _customFieldDefinitions = await _db.getCustomFieldDefinitions();
+      notifyListeners();
+    }
   }
 
   Future<void> deleteCustomFieldDefinition(String id) async {
     if (!canWrite) return;
-    // Find the field key to remove values from all animals
+    // Find the field key to remove values from all animals/contacts
     final field = _customFieldDefinitions.firstWhere(
       (f) => f.id == id,
       orElse: () => CustomFieldDefinition(name: '', fieldKey: ''),
     );
 
-    await _db.deleteCustomFieldDefinition(id);
-    _customFieldDefinitions = await _db.getCustomFieldDefinitions();
-
-    // Remove the field value from all animals that have it
-    if (field.fieldKey.isNotEmpty) {
-      for (final animal in _animals) {
-        if (animal.customFields.containsKey(field.fieldKey)) {
-          final updatedFields = Map<String, dynamic>.from(animal.customFields);
-          updatedFields.remove(field.fieldKey);
-          final updated = animal.copyWith(customFields: updatedFields);
-          await _db.updateAnimal(updated);
-        }
+    if (kIsWeb) {
+      try {
+        await _api.deleteCustomFieldDefinition(id);
+        _customFieldDefinitions.removeWhere((f) => f.id == id);
+        notifyListeners();
+      } catch (e) {
+        rethrow;
       }
-      _animals = await _db.getAllAnimals();
-    }
+    } else {
+      if (isLoggedIn) {
+        try {
+          await _api.deleteCustomFieldDefinition(id);
+        } catch (_) {}
+      }
+      await _db.deleteCustomFieldDefinition(id);
+      _customFieldDefinitions = await _db.getCustomFieldDefinitions();
 
-    notifyListeners();
+      // Remove the field value from all animals that have it
+      if (field.fieldKey.isNotEmpty &&
+          field.entityType == CustomFieldEntityType.animal) {
+        for (final animal in _animals) {
+          if (animal.customFields.containsKey(field.fieldKey)) {
+            final updatedFields =
+                Map<String, dynamic>.from(animal.customFields);
+            updatedFields.remove(field.fieldKey);
+            final updated = animal.copyWith(customFields: updatedFields);
+            await _db.updateAnimal(updated);
+          }
+        }
+        _animals = await _db.getAllAnimals();
+      }
+
+      // Remove the field value from all contacts that have it
+      if (field.fieldKey.isNotEmpty &&
+          field.entityType == CustomFieldEntityType.contact) {
+        for (final contact in _contacts) {
+          if (contact.customFields.containsKey(field.fieldKey)) {
+            final updatedFields =
+                Map<String, dynamic>.from(contact.customFields);
+            updatedFields.remove(field.fieldKey);
+            final updated = contact.copyWith(customFields: updatedFields);
+            await _db.updateContact(updated);
+          }
+        }
+        _contacts = await _db.getAllContacts();
+      }
+
+      notifyListeners();
+    }
   }
 
   // ─── Weight Records ────────────────────────────────────────────

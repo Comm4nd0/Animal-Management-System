@@ -884,13 +884,19 @@ class CustomFieldDefinitionViewSet(viewsets.ModelViewSet):
     CRUD API for custom field definitions.
 
     Each user defines their own set of custom fields which are then available
-    on all their animals. The actual field values are stored in each
-    Animal's custom_fields JSONField.
+    on their animals, contacts, or pedigree records. The actual field values
+    are stored in each record's custom_fields JSONField.
+
+    Filter by entity type:
+        ?entity_type=0  (Animal)
+        ?entity_type=1  (Contact)
+        ?entity_type=2  (Pedigree)
     """
     queryset = CustomFieldDefinition.objects.all()
     permission_classes = [ReadOnlyForReadOnlyUsers]
     serializer_class = CustomFieldDefinitionSerializer
-    filter_backends = [OrderingFilter]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['entity_type']
     ordering_fields = ['display_order', 'name', 'created_at']
     ordering = ['display_order', 'name']
 

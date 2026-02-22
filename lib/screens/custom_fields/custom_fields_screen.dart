@@ -7,46 +7,100 @@ import '../../widgets/demo_write_guard.dart';
 
 /// Screen for managing custom field definitions.
 /// Users can create, edit, reorder, and delete custom fields
-/// that appear on all their animal records.
-class CustomFieldsScreen extends StatelessWidget {
+/// that appear on their animal records, contacts, or pedigree views.
+class CustomFieldsScreen extends StatefulWidget {
   const CustomFieldsScreen({super.key});
+
+  @override
+  State<CustomFieldsScreen> createState() => _CustomFieldsScreenState();
+}
+
+class _CustomFieldsScreenState extends State<CustomFieldsScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+
+  static const _entityTypes = [
+    CustomFieldEntityType.animal,
+    CustomFieldEntityType.contact,
+    CustomFieldEntityType.pedigree,
+  ];
+
+  static const _entityLabels = ['Animals', 'Contacts', 'Pedigrees'];
+
+  static const _entityIcons = [
+    Icons.pets,
+    Icons.people,
+    Icons.account_tree,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _entityTypes.length, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  CustomFieldEntityType get _currentEntityType =>
+      _entityTypes[_tabController.index];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Custom Fields'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: List.generate(_entityTypes.length, (i) {
+            return Tab(
+              icon: Icon(_entityIcons[i]),
+              text: _entityLabels[i],
+            );
+          }),
+          onTap: (_) => setState(() {}),
+        ),
       ),
-      body: Consumer<AnimalProvider>(
-        builder: (context, provider, _) {
-          final fields = provider.customFieldDefinitions;
+      body: TabBarView(
+        controller: _tabController,
+        children: _entityTypes.map((entityType) {
+          return Consumer<AnimalProvider>(
+            builder: (context, provider, _) {
+              final fields =
+                  provider.customFieldDefinitionsFor(entityType);
 
-          if (fields.isEmpty) {
-            return _buildEmptyState(context);
-          }
+              if (fields.isEmpty) {
+                return _buildEmptyState(context, entityType);
+              }
 
-          return ReorderableListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: fields.length,
-            onReorder: (oldIndex, newIndex) =>
-                _reorderFields(context, provider, fields, oldIndex, newIndex),
-            itemBuilder: (context, index) {
-              final field = fields[index];
-              return _CustomFieldCard(
-                key: ValueKey(field.id),
-                field: field,
-                onEdit: () async {
-                  if (!await guardWriteAction(context)) return;
-                  _showFieldDialog(context, provider, field: field);
-                },
-                onDelete: () async {
-                  if (!await guardWriteAction(context)) return;
-                  _confirmDelete(context, provider, field);
+              return ReorderableListView.builder(
+                padding: const EdgeInsets.all(12),
+                itemCount: fields.length,
+                onReorder: (oldIndex, newIndex) => _reorderFields(
+                    context, provider, fields, oldIndex, newIndex),
+                itemBuilder: (context, index) {
+                  final field = fields[index];
+                  return _CustomFieldCard(
+                    key: ValueKey(field.id),
+                    field: field,
+                    onEdit: () async {
+                      if (!await guardWriteAction(context)) return;
+                      _showFieldDialog(context, provider,
+                          field: field, entityType: entityType);
+                    },
+                    onDelete: () async {
+                      if (!await guardWriteAction(context)) return;
+                      _confirmDelete(context, provider, field);
+                    },
+                  );
                 },
               );
             },
           );
-        },
+        }).toList(),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () async {
@@ -54,6 +108,7 @@ class CustomFieldsScreen extends StatelessWidget {
           _showFieldDialog(
             context,
             context.read<AnimalProvider>(),
+            entityType: _currentEntityType,
           );
         },
         child: const Icon(Icons.add),
@@ -61,7 +116,9 @@ class CustomFieldsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
+  Widget _buildEmptyState(
+      BuildContext context, CustomFieldEntityType entityType) {
+    final label = _entityLabels[entityType.index].toLowerCase();
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -79,7 +136,7 @@ class CustomFieldsScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Create custom fields to track additional information '
-              'for your animals. Fields can be text, numbers, dates, '
+              'for your $label. Fields can be text, numbers, dates, '
               'yes/no, or dropdown selections.',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -93,6 +150,7 @@ class CustomFieldsScreen extends StatelessWidget {
                 _showFieldDialog(
                   context,
                   context.read<AnimalProvider>(),
+                  entityType: entityType,
                 );
               },
               icon: const Icon(Icons.add),
@@ -138,13 +196,14 @@ class CustomFieldsScreen extends StatelessWidget {
     AnimalProvider provider,
     CustomFieldDefinition field,
   ) {
+    final targetLabel = field.entityTypeDisplay.toLowerCase();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Custom Field'),
         content: Text(
           'Are you sure you want to delete "${field.name}"? '
-          'This will remove the field and its values from all animals.',
+          'This will remove the field and its values from all ${targetLabel}s.',
         ),
         actions: [
           TextButton(
@@ -168,11 +227,13 @@ class CustomFieldsScreen extends StatelessWidget {
     BuildContext context,
     AnimalProvider provider, {
     CustomFieldDefinition? field,
+    required CustomFieldEntityType entityType,
   }) {
     showDialog(
       context: context,
       builder: (ctx) => _CustomFieldDialog(
         field: field,
+        entityType: entityType,
         onSave: (updatedField) {
           if (field != null) {
             provider.updateCustomFieldDefinition(updatedField);
@@ -276,9 +337,14 @@ class _CustomFieldCard extends StatelessWidget {
 
 class _CustomFieldDialog extends StatefulWidget {
   final CustomFieldDefinition? field;
+  final CustomFieldEntityType entityType;
   final ValueChanged<CustomFieldDefinition> onSave;
 
-  const _CustomFieldDialog({this.field, required this.onSave});
+  const _CustomFieldDialog({
+    this.field,
+    required this.entityType,
+    required this.onSave,
+  });
 
   @override
   State<_CustomFieldDialog> createState() => _CustomFieldDialogState();
@@ -313,9 +379,10 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
   @override
   Widget build(BuildContext context) {
     final isEditing = widget.field != null;
+    final entityLabel = _entityLabel(widget.entityType);
 
     return AlertDialog(
-      title: Text(isEditing ? 'Edit Custom Field' : 'New Custom Field'),
+      title: Text(isEditing ? 'Edit Custom Field' : 'New $entityLabel Field'),
       content: SizedBox(
         width: double.maxFinite,
         child: Form(
@@ -327,9 +394,9 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
               children: [
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Field Name *',
-                    hintText: 'e.g., Ear Tag, Horn Status, Fleece Weight',
+                    hintText: _hintForEntityType(widget.entityType),
                   ),
                   validator: (v) =>
                       v == null || v.isEmpty ? 'Name is required' : null,
@@ -349,7 +416,8 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
                 const SizedBox(height: 12),
                 SwitchListTile(
                   title: const Text('Required'),
-                  subtitle: const Text('Must be filled when adding animals'),
+                  subtitle: Text(
+                      'Must be filled when adding ${entityLabel.toLowerCase()}s'),
                   value: _required,
                   onChanged: (v) => setState(() => _required = v),
                   contentPadding: EdgeInsets.zero,
@@ -460,12 +528,35 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
         : CustomFieldDefinition(
             name: _nameController.text.trim(),
             fieldType: _selectedType,
+            entityType: widget.entityType,
             required: _required,
             options: _options,
           );
 
     widget.onSave(field);
     Navigator.pop(context);
+  }
+
+  String _entityLabel(CustomFieldEntityType type) {
+    switch (type) {
+      case CustomFieldEntityType.animal:
+        return 'Animal';
+      case CustomFieldEntityType.contact:
+        return 'Contact';
+      case CustomFieldEntityType.pedigree:
+        return 'Pedigree';
+    }
+  }
+
+  String _hintForEntityType(CustomFieldEntityType type) {
+    switch (type) {
+      case CustomFieldEntityType.animal:
+        return 'e.g., Ear Tag, Horn Status, Fleece Weight';
+      case CustomFieldEntityType.contact:
+        return 'e.g., Membership ID, Region, Licence Number';
+      case CustomFieldEntityType.pedigree:
+        return 'e.g., Registry Body, Certificate Number, Breed Line';
+    }
   }
 
   String _typeLabel(CustomFieldType type) {

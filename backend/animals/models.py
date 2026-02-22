@@ -25,6 +25,7 @@ class Contact(models.Model):
         help_text='Breeding prefix / affix',
     )
     notes = models.TextField(blank=True, default='')
+    custom_fields = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -435,8 +436,9 @@ class AnimalImage(models.Model):
 
 class CustomFieldDefinition(models.Model):
     """
-    Defines a custom field that a user can create for their animals.
-    The actual values are stored in the Animal.custom_fields JSONField.
+    Defines a custom field that a user can create for their animals,
+    contacts (breeders/owners), or pedigree records.
+    The actual values are stored in the respective model's custom_fields JSONField.
     """
 
     class FieldType(models.IntegerChoices):
@@ -445,6 +447,11 @@ class CustomFieldDefinition(models.Model):
         DATE = 2, 'Date'
         BOOLEAN = 3, 'Yes/No'
         DROPDOWN = 4, 'Dropdown'
+
+    class EntityType(models.IntegerChoices):
+        ANIMAL = 0, 'Animal'
+        CONTACT = 1, 'Contact'
+        PEDIGREE = 2, 'Pedigree'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -461,6 +468,11 @@ class CustomFieldDefinition(models.Model):
         help_text='Storage key used in the custom_fields JSON (auto-generated from name)',
     )
     field_type = models.IntegerField(choices=FieldType.choices, default=FieldType.TEXT)
+    entity_type = models.IntegerField(
+        choices=EntityType.choices,
+        default=EntityType.ANIMAL,
+        help_text='Which record type this field applies to',
+    )
     required = models.BooleanField(default=False)
     options = models.JSONField(
         default=list,
@@ -473,10 +485,10 @@ class CustomFieldDefinition(models.Model):
 
     class Meta:
         ordering = ['display_order', 'name']
-        unique_together = [['owner', 'field_key']]
+        unique_together = [['owner', 'field_key', 'entity_type']]
 
     def __str__(self):
-        return f'{self.name} ({self.get_field_type_display()})'
+        return f'{self.name} ({self.get_field_type_display()}) [{self.get_entity_type_display()}]'
 
     def save(self, *args, **kwargs):
         if not self.field_key:

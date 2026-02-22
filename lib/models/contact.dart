@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:uuid/uuid.dart';
 
 /// A person or organisation that can be assigned as a breeder
@@ -11,6 +12,7 @@ class Contact {
   final String address;
   final String prefix;
   final String notes;
+  final Map<String, dynamic> customFields;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +25,7 @@ class Contact {
     this.address = '',
     this.prefix = '',
     this.notes = '',
+    this.customFields = const {},
     DateTime? createdAt,
     DateTime? updatedAt,
   })  : id = id ?? const Uuid().v4(),
@@ -42,6 +45,7 @@ class Contact {
     String? address,
     String? prefix,
     String? notes,
+    Map<String, dynamic>? customFields,
   }) {
     return Contact(
       id: id,
@@ -52,6 +56,7 @@ class Contact {
       address: address ?? this.address,
       prefix: prefix ?? this.prefix,
       notes: notes ?? this.notes,
+      customFields: customFields ?? this.customFields,
       createdAt: createdAt,
       updatedAt: DateTime.now(),
     );
@@ -69,6 +74,7 @@ class Contact {
       'address': address,
       'prefix': prefix,
       'notes': notes,
+      'customFields': jsonEncode(customFields),
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
     };
@@ -84,6 +90,7 @@ class Contact {
       address: map['address'] as String? ?? '',
       prefix: map['prefix'] as String? ?? '',
       notes: map['notes'] as String? ?? '',
+      customFields: _decodeCustomFields(map['customFields']),
       createdAt:
           DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
       updatedAt:
@@ -103,6 +110,7 @@ class Contact {
       address: m['address'] as String? ?? '',
       prefix: m['prefix'] as String? ?? '',
       notes: m['notes'] as String? ?? '',
+      customFields: Map<String, dynamic>.from(m['custom_fields'] ?? {}),
     );
   }
 
@@ -115,7 +123,20 @@ class Contact {
       'address': address,
       'prefix': prefix,
       'notes': notes,
+      'custom_fields': customFields,
     };
+  }
+
+  static Map<String, dynamic> _decodeCustomFields(dynamic value) {
+    if (value == null || value == '{}' || value == '') return {};
+    if (value is Map<String, dynamic>) return value;
+    if (value is String) {
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return {};
   }
 
   @override
