@@ -213,7 +213,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
             qs.annotate(month=TruncMonth('created_at'))
             .values('month')
             .annotate(count=db_models.Count('id'))
-            .order_by('month_trunc')
+            .order_by('month')
         )
         registration_timeline = [
             {

@@ -96,6 +96,17 @@ build-web: ## Build Flutter web app and copy to backend for Django to serve
 	@echo "  Run 'make dev' or redeploy to serve it via Django."
 	@echo ""
 
+# ─── Flutter Android ──────────────────────────────────────
+build-android: ## Build Flutter Android APK
+	@echo "── Building Android APK..."
+	cd "$(CURDIR)" && flutter pub get
+	cd "$(CURDIR)" && flutter build apk --release
+	@echo "  ✓ Android APK built at build/app/outputs/flutter-apk/app-release.apk"
+
+run-android: ## Run Flutter app on connected Android device/emulator
+	@echo "── Running on Android..."
+	cd "$(CURDIR)" && flutter run
+
 # ─── Production ────────────────────────────────────────────
 deploy: ## Full deploy: infrastructure + application
 	bash deploy/scripts/deploy.sh

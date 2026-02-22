@@ -186,6 +186,9 @@ docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d --build
 echo "Waiting for services to start..."
 sleep 15
+echo "Restarting Nginx to clear upstream IP cache..."
+docker compose -f docker-compose.prod.yml restart nginx
+sleep 3
 docker compose -f docker-compose.prod.yml ps
 REMOTE
 
