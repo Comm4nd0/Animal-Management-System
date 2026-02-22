@@ -321,6 +321,26 @@ class DatabaseService {
     return Animal.fromMap(maps.first);
   }
 
+  Future<Map<String, Animal>> getAnimalsByIds(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    final db = await database;
+    final result = <String, Animal>{};
+    const chunkSize = 500;
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(i, (i + chunkSize).clamp(0, ids.length));
+      final placeholders = List.filled(chunk.length, '?').join(',');
+      final maps = await db.rawQuery(
+        'SELECT * FROM animals WHERE id IN ($placeholders)',
+        chunk,
+      );
+      for (final m in maps) {
+        final animal = Animal.fromMap(m);
+        result[animal.id] = animal;
+      }
+    }
+    return result;
+  }
+
   Future<List<Animal>> getAllAnimals() async {
     final db = await database;
     final maps = await db.query('animals', orderBy: 'name ASC');

@@ -12,19 +12,48 @@ class GeneticsService {
   // ─── Pedigree Tree ─────────────────────────────────────────────
 
   /// Builds a pedigree tree for the given animal up to [maxGenerations] deep.
+  ///
+  /// Uses breadth-first batch loading to fetch all ancestors in O(generations)
+  /// queries instead of O(2^generations) individual queries.
   Future<PedigreeNode?> buildPedigreeTree(
     String animalId, {
     int maxGenerations = 5,
   }) async {
-    return _buildNode(animalId, 0, maxGenerations);
+    // Phase 1: Batch-load all ancestors level by level
+    final animalMap = <String, Animal>{};
+    var currentIds = <String>{animalId};
+
+    for (var gen = 0; gen <= maxGenerations && currentIds.isNotEmpty; gen++) {
+      final toFetch =
+          currentIds.where((id) => !animalMap.containsKey(id)).toList();
+      if (toFetch.isNotEmpty) {
+        final fetched = await _db.getAnimalsByIds(toFetch);
+        animalMap.addAll(fetched);
+      }
+
+      // Collect parent IDs for next generation
+      final nextIds = <String>{};
+      for (final id in currentIds) {
+        final animal = animalMap[id];
+        if (animal != null) {
+          if (animal.sireId != null) nextIds.add(animal.sireId!);
+          if (animal.damId != null) nextIds.add(animal.damId!);
+        }
+      }
+      currentIds = nextIds;
+    }
+
+    // Phase 2: Build tree from the pre-loaded map
+    return _buildNodeFromMap(animalId, 0, maxGenerations, animalMap);
   }
 
-  Future<PedigreeNode?> _buildNode(
+  PedigreeNode? _buildNodeFromMap(
     String animalId,
     int generation,
     int maxGenerations,
-  ) async {
-    final animal = await _db.getAnimal(animalId);
+    Map<String, Animal> animalMap,
+  ) {
+    final animal = animalMap[animalId];
     if (animal == null) return null;
 
     PedigreeNode? sireNode;
@@ -32,10 +61,12 @@ class GeneticsService {
 
     if (generation < maxGenerations) {
       if (animal.sireId != null) {
-        sireNode = await _buildNode(animal.sireId!, generation + 1, maxGenerations);
+        sireNode = _buildNodeFromMap(
+            animal.sireId!, generation + 1, maxGenerations, animalMap);
       }
       if (animal.damId != null) {
-        damNode = await _buildNode(animal.damId!, generation + 1, maxGenerations);
+        damNode = _buildNodeFromMap(
+            animal.damId!, generation + 1, maxGenerations, animalMap);
       }
     }
 

@@ -15,6 +15,9 @@ def build_pedigree_tree(animal_id, max_generations=5):
     """
     Build a pedigree tree dictionary for the given animal.
 
+    Uses batch queries per generation level to avoid N+1 query problems.
+    For 6 generations this makes ~7 queries instead of ~63.
+
     Returns a nested dict:
     {
         'animal': <Animal>,
@@ -24,13 +27,42 @@ def build_pedigree_tree(animal_id, max_generations=5):
     }
     """
     try:
-        animal = Animal.objects.get(pk=animal_id)
+        root = Animal.objects.get(pk=animal_id)
     except Animal.DoesNotExist:
         return None
-    return _build_node(animal, 0, max_generations)
+
+    # Phase 1: Batch-load all ancestors level by level
+    animal_map = {str(root.pk): root}
+    current_ids = {str(root.pk)}
+
+    for _gen in range(max_generations + 1):
+        parent_ids = set()
+        for aid in current_ids:
+            animal = animal_map.get(aid)
+            if animal:
+                if animal.sire_id:
+                    parent_ids.add(str(animal.sire_id))
+                if animal.dam_id:
+                    parent_ids.add(str(animal.dam_id))
+
+        to_fetch = parent_ids - set(animal_map.keys())
+        if to_fetch:
+            for a in Animal.objects.filter(pk__in=list(to_fetch)):
+                animal_map[str(a.pk)] = a
+
+        current_ids = parent_ids
+        if not current_ids:
+            break
+
+    # Phase 2: Build tree from the pre-loaded map
+    return _build_node_from_map(str(root.pk), 0, max_generations, animal_map)
 
 
-def _build_node(animal, generation, max_generations):
+def _build_node_from_map(animal_id, generation, max_generations, animal_map):
+    animal = animal_map.get(animal_id)
+    if not animal:
+        return None
+
     node = {
         'animal': animal,
         'generation': generation,
@@ -39,17 +71,13 @@ def _build_node(animal, generation, max_generations):
     }
     if generation < max_generations:
         if animal.sire_id:
-            try:
-                sire = Animal.objects.get(pk=animal.sire_id)
-                node['sire'] = _build_node(sire, generation + 1, max_generations)
-            except Animal.DoesNotExist:
-                pass
+            node['sire'] = _build_node_from_map(
+                str(animal.sire_id), generation + 1, max_generations, animal_map
+            )
         if animal.dam_id:
-            try:
-                dam = Animal.objects.get(pk=animal.dam_id)
-                node['dam'] = _build_node(dam, generation + 1, max_generations)
-            except Animal.DoesNotExist:
-                pass
+            node['dam'] = _build_node_from_map(
+                str(animal.dam_id), generation + 1, max_generations, animal_map
+            )
     return node
 
 

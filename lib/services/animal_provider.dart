@@ -691,8 +691,10 @@ class AnimalProvider extends ChangeNotifier {
 
   // ─── Genetics ─────────────────────────────────────────────────
 
-  Future<PedigreeNode?> buildPedigreeTree(String animalId) async {
-    return await _genetics.buildPedigreeTree(animalId);
+  Future<PedigreeNode?> buildPedigreeTree(String animalId,
+      {int maxGenerations = 5}) async {
+    return await _genetics.buildPedigreeTree(animalId,
+        maxGenerations: maxGenerations);
   }
 
   Future<List<BreedingSuggestion>> getBreedingSuggestions(

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze:*)",
+      "Bash(wsl -d Ubuntu -- bash -c \"cd /home/marco/code/Animal-Management-System && flutter analyze lib/screens/pedigree/pedigree_screen.dart lib/screens/animals/animal_detail_screen.dart lib/services/genetics_service.dart lib/services/database_service.dart lib/services/animal_provider.dart 2>&1 | head -60\")",
+      "Bash(wsl -d Ubuntu -- bash -lc \"cd /home/marco/code/Animal-Management-System && flutter analyze lib/screens/pedigree/pedigree_screen.dart lib/screens/animals/animal_detail_screen.dart lib/services/genetics_service.dart lib/services/database_service.dart lib/services/animal_provider.dart 2>&1 | head -60\")",
+      "Bash(wsl -d Ubuntu -- bash -lc:*)"
+    ]
+  }
+}
