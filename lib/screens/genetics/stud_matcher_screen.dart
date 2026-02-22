@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -23,13 +24,93 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
   int _taskProgress = 0;
   String? _errorMessage;
 
+  // Stud typeahead state
+  final _studSearchController = TextEditingController();
+  final _studFocusNode = FocusNode();
+  bool _studShowSuggestions = false;
+  List<Animal> _studSuggestions = [];
+  Timer? _studDebounce;
+  bool _studSearchLoading = false;
+
   @override
   void initState() {
     super.initState();
+    _studFocusNode.addListener(() {
+      if (_studFocusNode.hasFocus) {
+        setState(() => _studShowSuggestions = true);
+        if (_selectedStudId == null) {
+          _searchStudCandidates();
+        }
+      } else {
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _studShowSuggestions = false);
+        });
+      }
+    });
+    _studSearchController.addListener(() {
+      _studDebounce?.cancel();
+      _studDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (_selectedStudId == null) {
+          _searchStudCandidates();
+        }
+      });
+    });
     if (widget.preselectedStudId != null) {
       _selectedStudId = widget.preselectedStudId;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadMatches());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _loadPreselectedStudDisplay();
+        _loadMatches();
+      });
     }
+  }
+
+  @override
+  void dispose() {
+    _studDebounce?.cancel();
+    _studSearchController.dispose();
+    _studFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadPreselectedStudDisplay() async {
+    if (_selectedStudId == null) return;
+    final provider = context.read<AnimalProvider>();
+    var stud = provider.getAnimalById(_selectedStudId!);
+    stud ??= await provider.fetchAnimalById(_selectedStudId!);
+    if (stud != null && mounted) {
+      _studSearchController.text = _formatAnimalDisplay(stud);
+    }
+  }
+
+  Future<void> _searchStudCandidates() async {
+    final provider = context.read<AnimalProvider>();
+    final query = _studSearchController.text.trim();
+    if (_selectedStudId != null) return;
+
+    setState(() => _studSearchLoading = true);
+
+    try {
+      final results = await provider.searchParentCandidates(
+        sex: Sex.male,
+        query: query,
+      );
+      if (!mounted) return;
+      setState(() {
+        _studSuggestions = results;
+        _studSearchLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _studSearchLoading = false);
+    }
+  }
+
+  String _formatAnimalDisplay(Animal a) {
+    final reg = a.registrationNumber;
+    if (reg != null && reg.isNotEmpty) {
+      return '${a.name} - $reg (${a.breed})';
+    }
+    return '${a.name} (${a.breed})';
   }
 
   Future<void> _loadMatches() async {
@@ -154,9 +235,8 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
       ),
       body: Consumer<AnimalProvider>(
         builder: (context, provider, _) {
-          final males = provider.allAnimals
-              .where((a) => a.sex == Sex.male && a.status == AnimalStatus.alive)
-              .toList();
+          final shouldShowStudSuggestions =
+              _studShowSuggestions && _selectedStudId == null;
 
           return Column(
             children: [
@@ -164,29 +244,129 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    DropdownButtonFormField<String>(
-                      value: _selectedStudId,
-                      decoration: const InputDecoration(
+                    TextFormField(
+                      controller: _studSearchController,
+                      focusNode: _studFocusNode,
+                      decoration: InputDecoration(
                         labelText: 'Select Stud (Male)',
-                        prefixIcon: Icon(Icons.male, color: AppTheme.maleColor),
+                        prefixIcon:
+                            const Icon(Icons.male, color: AppTheme.maleColor),
+                        hintText: 'Type name or reg number to search...',
+                        suffixIcon: _selectedStudId != null
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                tooltip: 'Clear selection',
+                                onPressed: () {
+                                  setState(() {
+                                    _selectedStudId = null;
+                                    _studSearchController.clear();
+                                    _studSuggestions = [];
+                                    _matches = [];
+                                  });
+                                },
+                              )
+                            : _studSearchLoading
+                                ? const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    ),
+                                  )
+                                : null,
                       ),
-                      items: [
-                        const DropdownMenuItem(
-                            value: null, child: Text('Choose a stud...')),
-                        ...males.map((a) => DropdownMenuItem(
-                              value: a.id,
-                              child: Text('${a.name} (${a.breed})'),
-                            )),
-                      ],
-                      onChanged: (v) {
-                        setState(() {
-                          _selectedStudId = v;
-                          _matches = [];
-                        });
-                        if (v != null) _loadMatches();
+                      onChanged: (value) {
+                        if (_selectedStudId != null) {
+                          setState(() {
+                            _selectedStudId = null;
+                            _studShowSuggestions = true;
+                            _matches = [];
+                          });
+                          _searchStudCandidates();
+                        }
                       },
                     ),
+                    if (shouldShowStudSuggestions &&
+                        _studSuggestions.isNotEmpty)
+                      Container(
+                        constraints: const BoxConstraints(maxHeight: 200),
+                        margin: const EdgeInsets.only(top: 2),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).cardColor,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.grey.shade300),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ListView.builder(
+                          padding: EdgeInsets.zero,
+                          shrinkWrap: true,
+                          itemCount: _studSuggestions.length,
+                          itemBuilder: (context, index) {
+                            final animal = _studSuggestions[index];
+                            return ListTile(
+                              dense: true,
+                              leading: const Icon(
+                                Icons.male,
+                                size: 20,
+                                color: AppTheme.maleColor,
+                              ),
+                              title: Text(
+                                animal.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              subtitle: Text(
+                                [
+                                  if (animal.registrationNumber != null &&
+                                      animal.registrationNumber!.isNotEmpty)
+                                    'Reg: ${animal.registrationNumber}',
+                                  animal.breed,
+                                ].join(' · '),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                              onTap: () {
+                                setState(() {
+                                  _selectedStudId = animal.id;
+                                  _studSearchController.text =
+                                      _formatAnimalDisplay(animal);
+                                  _studShowSuggestions = false;
+                                  _studFocusNode.unfocus();
+                                  _matches = [];
+                                });
+                                _loadMatches();
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    if (shouldShowStudSuggestions &&
+                        _studSuggestions.isEmpty &&
+                        !_studSearchLoading &&
+                        _studSearchController.text.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'No matching males found',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
                     if (_selectedStudId != null && _matches.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/animal_provider.dart';
@@ -14,10 +15,139 @@ class CoiCalculatorScreen extends StatefulWidget {
 class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
   String? _selectedSireId;
   String? _selectedDamId;
+  // Store selected animal names for the result card display
+  String? _selectedSireName;
+  String? _selectedDamName;
   double? _calculatedCoi;
   List<Animal> _commonAncestors = [];
   bool _isCalculating = false;
   String? _error;
+
+  // Sire typeahead state
+  final _sireSearchController = TextEditingController();
+  final _sireFocusNode = FocusNode();
+  bool _sireShowSuggestions = false;
+  List<Animal> _sireSuggestions = [];
+  Timer? _sireDebounce;
+  bool _sireSearchLoading = false;
+
+  // Dam typeahead state
+  final _damSearchController = TextEditingController();
+  final _damFocusNode = FocusNode();
+  bool _damShowSuggestions = false;
+  List<Animal> _damSuggestions = [];
+  Timer? _damDebounce;
+  bool _damSearchLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _sireFocusNode.addListener(() {
+      if (_sireFocusNode.hasFocus) {
+        setState(() => _sireShowSuggestions = true);
+        if (_selectedSireId == null) {
+          _searchCandidates(isSire: true);
+        }
+      } else {
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _sireShowSuggestions = false);
+        });
+      }
+    });
+    _damFocusNode.addListener(() {
+      if (_damFocusNode.hasFocus) {
+        setState(() => _damShowSuggestions = true);
+        if (_selectedDamId == null) {
+          _searchCandidates(isSire: false);
+        }
+      } else {
+        Future.delayed(const Duration(milliseconds: 200), () {
+          if (mounted) setState(() => _damShowSuggestions = false);
+        });
+      }
+    });
+    _sireSearchController.addListener(() {
+      _sireDebounce?.cancel();
+      _sireDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (_selectedSireId == null) {
+          _searchCandidates(isSire: true);
+        }
+      });
+    });
+    _damSearchController.addListener(() {
+      _damDebounce?.cancel();
+      _damDebounce = Timer(const Duration(milliseconds: 300), () {
+        if (_selectedDamId == null) {
+          _searchCandidates(isSire: false);
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _sireDebounce?.cancel();
+    _damDebounce?.cancel();
+    _sireSearchController.dispose();
+    _damSearchController.dispose();
+    _sireFocusNode.dispose();
+    _damFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _searchCandidates({required bool isSire}) async {
+    final provider = context.read<AnimalProvider>();
+    final controller = isSire ? _sireSearchController : _damSearchController;
+    final sex = isSire ? Sex.male : Sex.female;
+
+    String query = controller.text.trim();
+    final selectedId = isSire ? _selectedSireId : _selectedDamId;
+    if (selectedId != null) return;
+
+    setState(() {
+      if (isSire) {
+        _sireSearchLoading = true;
+      } else {
+        _damSearchLoading = true;
+      }
+    });
+
+    try {
+      final results = await provider.searchParentCandidates(
+        sex: sex,
+        query: query,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        if (isSire) {
+          _sireSuggestions = results;
+          _sireSearchLoading = false;
+        } else {
+          _damSuggestions = results;
+          _damSearchLoading = false;
+        }
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        if (isSire) {
+          _sireSearchLoading = false;
+        } else {
+          _damSearchLoading = false;
+        }
+      });
+    }
+  }
+
+  String _formatAnimalDisplay(Animal a) {
+    final reg = a.registrationNumber;
+    if (reg != null && reg.isNotEmpty) {
+      return '${a.name} - $reg (${a.breed})';
+    }
+    return '${a.name} (${a.breed})';
+  }
 
   Future<void> _calculate() async {
     if (_selectedSireId == null || _selectedDamId == null) return;
@@ -32,10 +162,16 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     try {
       final provider = context.read<AnimalProvider>();
       final coi = await provider.calculateCOI(_selectedSireId!, _selectedDamId!);
-      final ancestors = await provider.geneticsService.findCommonAncestors(
-        _selectedSireId!,
-        _selectedDamId!,
-      );
+
+      List<Animal> ancestors = [];
+      try {
+        ancestors = await provider.geneticsService.findCommonAncestors(
+          _selectedSireId!,
+          _selectedDamId!,
+        );
+      } catch (_) {
+        // Common ancestors may not be available on web — non-critical
+      }
 
       setState(() {
         _calculatedCoi = coi;
@@ -58,19 +194,12 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
       ),
       body: Consumer<AnimalProvider>(
         builder: (context, provider, _) {
-          final males = provider.allAnimals
-              .where((a) => a.sex == Sex.male && a.status == AnimalStatus.alive)
-              .toList();
-          final females = provider.allAnimals
-              .where((a) => a.sex == Sex.female && a.status == AnimalStatus.alive)
-              .toList();
-
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _buildInfoCard(),
               const SizedBox(height: 16),
-              _buildParentSelection(males, females),
+              _buildParentSelection(),
               const SizedBox(height: 16),
               SizedBox(
                 height: 48,
@@ -139,7 +268,7 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     );
   }
 
-  Widget _buildParentSelection(List<Animal> males, List<Animal> females) {
+  Widget _buildParentSelection() {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -153,42 +282,80 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
                   ),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _selectedSireId,
-              decoration: const InputDecoration(
-                labelText: 'Sire (Father)',
-                prefixIcon: Icon(Icons.male, color: AppTheme.maleColor),
-              ),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Select sire...')),
-                ...males.map((a) => DropdownMenuItem(
-                      value: a.id,
-                      child: Text('${a.name} (${a.breed})'),
-                    )),
-              ],
-              onChanged: (v) => setState(() {
-                _selectedSireId = v;
+            _buildAnimalTypeahead(
+              label: 'Sire (Father)',
+              icon: Icons.male,
+              iconColor: AppTheme.maleColor,
+              selectedId: _selectedSireId,
+              suggestions: _sireSuggestions,
+              isLoading: _sireSearchLoading,
+              controller: _sireSearchController,
+              focusNode: _sireFocusNode,
+              showSuggestions: _sireShowSuggestions,
+              onSelected: (animal) => setState(() {
+                _selectedSireId = animal.id;
+                _selectedSireName = animal.name;
+                _sireSearchController.text = _formatAnimalDisplay(animal);
+                _sireShowSuggestions = false;
+                _sireFocusNode.unfocus();
                 _calculatedCoi = null;
               }),
+              onCleared: () {
+                setState(() {
+                  _selectedSireId = null;
+                  _selectedSireName = null;
+                  _sireSearchController.clear();
+                  _sireSuggestions = [];
+                  _calculatedCoi = null;
+                });
+              },
+              onSelectionInvalidated: () {
+                setState(() {
+                  _selectedSireId = null;
+                  _selectedSireName = null;
+                  _sireShowSuggestions = true;
+                  _calculatedCoi = null;
+                });
+                _searchCandidates(isSire: true);
+              },
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              value: _selectedDamId,
-              decoration: const InputDecoration(
-                labelText: 'Dam (Mother)',
-                prefixIcon: Icon(Icons.female, color: AppTheme.femaleColor),
-              ),
-              items: [
-                const DropdownMenuItem(value: null, child: Text('Select dam...')),
-                ...females.map((a) => DropdownMenuItem(
-                      value: a.id,
-                      child: Text('${a.name} (${a.breed})'),
-                    )),
-              ],
-              onChanged: (v) => setState(() {
-                _selectedDamId = v;
+            _buildAnimalTypeahead(
+              label: 'Dam (Mother)',
+              icon: Icons.female,
+              iconColor: AppTheme.femaleColor,
+              selectedId: _selectedDamId,
+              suggestions: _damSuggestions,
+              isLoading: _damSearchLoading,
+              controller: _damSearchController,
+              focusNode: _damFocusNode,
+              showSuggestions: _damShowSuggestions,
+              onSelected: (animal) => setState(() {
+                _selectedDamId = animal.id;
+                _selectedDamName = animal.name;
+                _damSearchController.text = _formatAnimalDisplay(animal);
+                _damShowSuggestions = false;
+                _damFocusNode.unfocus();
                 _calculatedCoi = null;
               }),
+              onCleared: () {
+                setState(() {
+                  _selectedDamId = null;
+                  _selectedDamName = null;
+                  _damSearchController.clear();
+                  _damSuggestions = [];
+                  _calculatedCoi = null;
+                });
+              },
+              onSelectionInvalidated: () {
+                setState(() {
+                  _selectedDamId = null;
+                  _selectedDamName = null;
+                  _damShowSuggestions = true;
+                  _calculatedCoi = null;
+                });
+                _searchCandidates(isSire: false);
+              },
             ),
           ],
         ),
@@ -196,10 +363,125 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     );
   }
 
+  Widget _buildAnimalTypeahead({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required String? selectedId,
+    required List<Animal> suggestions,
+    required bool isLoading,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required bool showSuggestions,
+    required ValueChanged<Animal> onSelected,
+    required VoidCallback onCleared,
+    required VoidCallback onSelectionInvalidated,
+  }) {
+    final shouldShow = showSuggestions && selectedId == null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: Icon(icon, color: iconColor),
+            hintText: 'Type name or reg number to search...',
+            suffixIcon: selectedId != null
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: 'Clear selection',
+                    onPressed: onCleared,
+                  )
+                : isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
+          ),
+          onChanged: (value) {
+            if (selectedId != null) {
+              onSelectionInvalidated();
+            }
+          },
+        ),
+        if (shouldShow && suggestions.isNotEmpty)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            margin: const EdgeInsets.only(top: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: suggestions.length,
+              itemBuilder: (context, index) {
+                final animal = suggestions[index];
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    icon,
+                    size: 20,
+                    color: iconColor,
+                  ),
+                  title: Text(
+                    animal.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    [
+                      if (animal.registrationNumber != null &&
+                          animal.registrationNumber!.isNotEmpty)
+                        'Reg: ${animal.registrationNumber}',
+                      animal.breed,
+                    ].join(' · '),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  onTap: () => onSelected(animal),
+                );
+              },
+            ),
+          ),
+        if (shouldShow && suggestions.isEmpty && !isLoading && controller.text.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'No matching animals found',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildResultCard(AnimalProvider provider) {
     final coi = _calculatedCoi!;
-    final sire = provider.getAnimalById(_selectedSireId!);
-    final dam = provider.getAnimalById(_selectedDamId!);
+    final sireName = _selectedSireName ?? provider.getAnimalById(_selectedSireId!)?.name ?? '?';
+    final damName = _selectedDamName ?? provider.getAnimalById(_selectedDamId!)?.name ?? '?';
 
     // Traffic light rating
     final Color ratingColor;
@@ -248,7 +530,7 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
             child: Column(
               children: [
                 Text(
-                  '${sire?.name ?? "?"} x ${dam?.name ?? "?"}',
+                  '$sireName x $damName',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),

@@ -219,7 +219,7 @@ class AnimalProvider extends ChangeNotifier {
   /// sex, and an optional text query (name or registration number).
   /// Falls back to local filtering when the API is unavailable.
   Future<List<Animal>> searchParentCandidates({
-    required String species,
+    String? species,
     String? breed,
     required Sex sex,
     String query = '',
@@ -235,11 +235,12 @@ class AnimalProvider extends ChangeNotifier {
     } catch (_) {
       // Fallback to local filtering when API is unavailable
       final sexAnimals = sex == Sex.male ? maleAnimals : femaleAnimals;
-      final lowerSpecies = species.toLowerCase();
+      final lowerSpecies = species?.toLowerCase();
       final lowerBreed = breed?.toLowerCase() ?? '';
       final lowerQuery = query.toLowerCase();
       return sexAnimals.where((a) {
-        if (a.species.toLowerCase() != lowerSpecies) return false;
+        if (lowerSpecies != null &&
+            a.species.toLowerCase() != lowerSpecies) return false;
         if (lowerBreed.isNotEmpty && a.breed.toLowerCase() != lowerBreed) {
           return false;
         }
@@ -789,6 +790,12 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<double> calculateCOI(String sireId, String damId) async {
+    // Try the API first (required for web/demo where local DB is sparse)
+    try {
+      return await _api.calculateCOI(sireId, damId);
+    } catch (_) {
+      // API unavailable — fall through to local genetics service
+    }
     return await _genetics.calculateCOI(sireId: sireId, damId: damId);
   }
 
