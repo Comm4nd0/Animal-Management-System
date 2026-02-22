@@ -294,15 +294,24 @@ class Command(BaseCommand):
     # ── Custom fields ─────────────────────────────────────────────────────
 
     def _create_custom_fields(self):
+        # (name, key, type, options, order, show_in_pedigree, applicable_breeds)
+        # applicable_breeds=[] means all breeds
         fields = [
-            ('Ear Tag Number', 'ear_tag', CustomFieldDefinition.FieldType.TEXT, [], 1, True),
+            ('Ear Tag Number', 'ear_tag', CustomFieldDefinition.FieldType.TEXT,
+             [], 1, True, []),
             ('Horn Status', 'horn_status', CustomFieldDefinition.FieldType.DROPDOWN,
-             ['Polled', 'Horned', 'Scurred', 'Dehorned'], 2, False),
-            ('Fleece Weight (kg)', 'fleece_weight', CustomFieldDefinition.FieldType.NUMBER, [], 3, False),
-            ('Temperament Score', 'temperament', CustomFieldDefinition.FieldType.NUMBER, [], 4, False),
-            ('Registration Date', 'reg_date', CustomFieldDefinition.FieldType.DATE, [], 5, True),
+             ['Polled', 'Horned', 'Scurred', 'Dehorned'], 2, False,
+             ['Angus', 'Hereford', 'Charolais', 'Holstein', 'Simmental',
+              'Boer', 'Nubian', 'Alpine', 'Saanen']),
+            ('Fleece Weight (kg)', 'fleece_weight', CustomFieldDefinition.FieldType.NUMBER,
+             [], 3, False,
+             ['Suffolk', 'Merino', 'Dorper', 'Texel', 'Huacaya', 'Suri']),
+            ('Temperament Score', 'temperament', CustomFieldDefinition.FieldType.NUMBER,
+             [], 4, False, []),
+            ('Registration Date', 'reg_date', CustomFieldDefinition.FieldType.DATE,
+             [], 5, True, []),
         ]
-        for name, key, ftype, options, order, pedigree in fields:
+        for name, key, ftype, options, order, pedigree, breeds in fields:
             CustomFieldDefinition.objects.get_or_create(
                 field_key=key,
                 owner=self.profile,
@@ -312,6 +321,7 @@ class Command(BaseCommand):
                     'field_type': ftype,
                     'required': False,
                     'show_in_pedigree': pedigree,
+                    'applicable_breeds': breeds,
                     'options': options,
                     'display_order': order,
                 },

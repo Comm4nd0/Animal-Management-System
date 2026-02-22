@@ -641,8 +641,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                   ),
                 ),
 
-                // Custom Fields section (animal-type only)
-                if (provider.customFieldDefinitionsFor(CustomFieldEntityType.animal).isNotEmpty) ...[
+                // Custom Fields section (animal-type only, filtered by breed)
+                if (provider.customFieldDefinitionsFor(CustomFieldEntityType.animal)
+                    .where((f) => f.appliesTo(_breedController.text.trim()))
+                    .isNotEmpty) ...[
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -662,9 +664,9 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ...provider.customFieldDefinitionsFor(CustomFieldEntityType.animal).map(
-                    (field) => _buildCustomField(field),
-                  ),
+                  ...provider.customFieldDefinitionsFor(CustomFieldEntityType.animal)
+                    .where((f) => f.appliesTo(_breedController.text.trim()))
+                    .map((field) => _buildCustomField(field)),
                 ],
 
                 const SizedBox(height: 24),
@@ -1327,9 +1329,10 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       }
     }
 
-    // Collect custom field values from controllers (animal-type only)
+    // Collect custom field values from controllers (animal-type, breed-filtered)
+    final breed = _breedController.text.trim();
     final customFields = <String, dynamic>{};
-    for (final fieldDef in provider.customFieldDefinitionsFor(CustomFieldEntityType.animal)) {
+    for (final fieldDef in provider.customFieldDefinitionsFor(CustomFieldEntityType.animal).where((f) => f.appliesTo(breed))) {
       final key = fieldDef.fieldKey;
       if (fieldDef.fieldType == CustomFieldType.text ||
           fieldDef.fieldType == CustomFieldType.number) {
