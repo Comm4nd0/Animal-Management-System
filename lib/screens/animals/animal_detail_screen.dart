@@ -1,8 +1,10 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/animal_provider.dart';
+import '../../services/background_task_service.dart';
 import '../../models/models.dart';
 import '../../utils/app_theme.dart';
 import '../../widgets/demo_write_guard.dart';
@@ -24,6 +26,9 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _fetchingAnimal = false;
+  PedigreeNode? _pedigreeTree;
+  bool _pedigreeLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -43,7 +48,124 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       p.loadShowResults(widget.animalId);
       p.loadFinancialRecords(widget.animalId);
       p.loadDocumentAttachments(widget.animalId);
+      _loadPedigreeTree();
     });
+  }
+
+  Future<void> _loadPedigreeTree() async {
+    setState(() => _pedigreeLoading = true);
+
+    final provider = context.read<AnimalProvider>();
+
+    PedigreeNode? tree;
+
+    if (kIsWeb || provider.isDemoMode) {
+      await _loadPedigreeViaBackgroundTask();
+      tree = _pedigreeTree;
+    } else {
+      tree = await provider.buildPedigreeTree(widget.animalId);
+    }
+
+    // Fallback: build the tree from the in-memory animal list when the
+    // primary method (SQLite query or background task) returns nothing.
+    tree ??= _buildTreeFromMemory(provider, widget.animalId, 0);
+
+    if (mounted) {
+      setState(() {
+        _pedigreeTree = tree;
+        _pedigreeLoading = false;
+      });
+    }
+  }
+
+  PedigreeNode? _buildTreeFromMemory(
+    AnimalProvider provider,
+    String animalId,
+    int generation, {
+    int maxGenerations = 4,
+  }) {
+    final animal = provider.getAnimalById(animalId);
+    if (animal == null) return null;
+
+    PedigreeNode? sireNode;
+    PedigreeNode? damNode;
+
+    if (generation < maxGenerations) {
+      if (animal.sireId != null) {
+        sireNode = _buildTreeFromMemory(
+            provider, animal.sireId!, generation + 1,
+            maxGenerations: maxGenerations);
+      }
+      if (animal.damId != null) {
+        damNode = _buildTreeFromMemory(
+            provider, animal.damId!, generation + 1,
+            maxGenerations: maxGenerations);
+      }
+    }
+
+    return PedigreeNode(
+      animal: animal,
+      sire: sireNode,
+      dam: damNode,
+      generation: generation,
+    );
+  }
+
+  Future<void> _loadPedigreeViaBackgroundTask() async {
+    final taskService = BackgroundTaskService();
+    final result = await taskService.computePedigreeTree(
+      widget.animalId,
+      generations: 4,
+      onProgress: (_) {},
+    );
+
+    if (!mounted) return;
+
+    if (result != null && !result.isFailed && result.result != null) {
+      final tree = _parsePedigreeResult(result.result!);
+      setState(() {
+        _pedigreeTree = tree;
+        _pedigreeLoading = false;
+      });
+    } else {
+      setState(() => _pedigreeLoading = false);
+    }
+  }
+
+  PedigreeNode? _parsePedigreeResult(Map<String, dynamic> data) {
+    final animalData = data['animal'] as Map<String, dynamic>?;
+    if (animalData == null) return null;
+
+    return PedigreeNode(
+      animal: _animalFromApiData(animalData),
+      sire: data['sire'] != null
+          ? _parsePedigreeResult(
+              Map<String, dynamic>.from(data['sire'] as Map))
+          : null,
+      dam: data['dam'] != null
+          ? _parsePedigreeResult(
+              Map<String, dynamic>.from(data['dam'] as Map))
+          : null,
+      generation: data['generation'] as int? ?? 0,
+    );
+  }
+
+  Animal _animalFromApiData(Map<String, dynamic> m) {
+    return Animal(
+      id: m['id'] as String? ?? '',
+      name: m['name'] as String? ?? 'Unknown',
+      species: m['species'] as String? ?? '',
+      breed: m['breed'] as String? ?? '',
+      sex: Sex.values[(m['sex'] as int?) ?? 0],
+      dateOfBirth: m['date_of_birth'] != null
+          ? DateTime.tryParse(m['date_of_birth'] as String)
+          : null,
+      color: m['color'] as String?,
+      registrationNumber: m['registration_number'] as String?,
+      status: AnimalStatus.values[(m['status'] as int?) ?? 0],
+      geneticTraits: {},
+      customFields: {},
+    );
   }
 
   Future<void> _fetchFromApi(AnimalProvider provider) async {
@@ -116,6 +238,7 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
                   await p.fetchAnimalById(widget.animalId);
                   if (!mounted) return;
                   await _ensureParentsLoaded(p);
+                  if (mounted) _loadPedigreeTree();
                 },
               ),
               PopupMenuButton<String>(
@@ -341,6 +464,8 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
             ),
           ),
         ),
+        // Family Tree section (4 generations deep)
+        _buildFamilyTreeSection(context, animal),
         const SizedBox(height: 8),
         ElevatedButton.icon(
           onPressed: () => Navigator.pushNamed(
@@ -354,6 +479,243 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFamilyTreeSection(BuildContext context, Animal animal) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Family Tree',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            if (_pedigreeLoading)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 8),
+                      Text('Loading family tree...'),
+                    ],
+                  ),
+                ),
+              )
+            else if (_pedigreeTree == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'No family tree data available',
+                    style: TextStyle(color: Colors.grey.shade500),
+                  ),
+                ),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: _buildPedigreeChart(_pedigreeTree!),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Column-grid mini-pedigree ──────────────────────────────
+
+  static const _miniGenLabels = ['Subject', 'Parents', 'Grandparents', 'Great-GP', 'GG-GP'];
+  static const _miniMaxGen = 4;
+
+  List<List<PedigreeNode?>> _flattenMiniTree(PedigreeNode root) {
+    final columns = <List<PedigreeNode?>>[];
+    var currentLevel = <PedigreeNode?>[root];
+    for (var gen = 0; gen <= _miniMaxGen; gen++) {
+      columns.add(List<PedigreeNode?>.from(currentLevel));
+      if (gen < _miniMaxGen) {
+        final nextLevel = <PedigreeNode?>[];
+        for (final node in currentLevel) {
+          nextLevel.add(node?.sire);
+          nextLevel.add(node?.dam);
+        }
+        currentLevel = nextLevel;
+      }
+    }
+    return columns;
+  }
+
+  double _miniCardWidth(int gen) => gen == 0 ? 150 : (gen >= 3 ? 100 : 120);
+  double _miniCardHeight(int gen) => gen == 0 ? 60 : (gen >= 3 ? 40 : 50);
+
+  Widget _buildPedigreeChart(PedigreeNode tree) {
+    final columns = _flattenMiniTree(tree);
+    final maxSlots = columns.last.length;
+    final cellH = _miniCardHeight(_miniMaxGen) + 6;
+    final totalHeight = (maxSlots * cellH).clamp(200.0, 1200.0);
+
+    return SizedBox(
+      height: totalHeight,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var gen = 0; gen < columns.length; gen++) ...[
+            _buildMiniGenColumn(columns[gen], gen),
+            if (gen < columns.length - 1)
+              _buildMiniConnectors(columns[gen].length, columns[gen + 1].length),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniGenColumn(List<PedigreeNode?> nodes, int gen) {
+    final w = _miniCardWidth(gen);
+    final label = gen < _miniGenLabels.length ? _miniGenLabels[gen] : 'Gen $gen';
+    return SizedBox(
+      width: w,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(label, textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+          ),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                for (var i = 0; i < nodes.length; i++)
+                  nodes[i] != null
+                      ? _buildTreeAnimalCard(nodes[i]!.animal, gen)
+                      : _buildUnknownTreeCard(i.isEven ? 'Unknown Sire' : 'Unknown Dam', gen),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniConnectors(int parentCount, int childCount) {
+    return SizedBox(
+      width: 24,
+      child: Column(
+        children: [
+          const SizedBox(height: 18),
+          Expanded(
+            child: CustomPaint(
+              painter: _MiniBracketPainter(
+                parentCount: parentCount,
+                childCount: childCount,
+                color: Colors.grey.shade400,
+              ),
+              size: Size.infinite,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTreeAnimalCard(Animal animal, int generation) {
+    final isMale = animal.sex == Sex.male;
+    final sexColor = isMale ? AppTheme.maleColor : AppTheme.femaleColor;
+    final isSubject = generation == 0;
+    final w = _miniCardWidth(generation);
+    final h = _miniCardHeight(generation);
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(context, '/animals/${animal.id}');
+      },
+      child: Container(
+        width: w,
+        height: h,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSubject ? sexColor : Colors.grey.shade300,
+            width: isSubject ? 2 : 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(5),
+          child: Row(
+            children: [
+              Container(width: 3, color: sexColor),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(isMale ? Icons.male : Icons.female, size: 12, color: sexColor),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Text(
+                              animal.name,
+                              style: TextStyle(
+                                fontWeight: isSubject ? FontWeight.bold : FontWeight.w500,
+                                fontSize: isSubject ? 11 : 10,
+                                color: AppTheme.primaryColor,
+                                decoration: TextDecoration.underline,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (animal.breed.isNotEmpty && generation < 3)
+                        Text(animal.breed,
+                          style: TextStyle(fontSize: 8, color: Colors.grey.shade600),
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnknownTreeCard(String label, int generation) {
+    final w = _miniCardWidth(generation);
+    final h = _miniCardHeight(generation);
+    return Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Center(
+        child: Text(label,
+          style: TextStyle(fontSize: 9, color: Colors.grey.shade400, fontStyle: FontStyle.italic)),
+      ),
     );
   }
 
@@ -774,6 +1136,56 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       ),
     );
   }
+}
+
+/// Bracket connector painter for the mini-pedigree in the detail screen.
+class _MiniBracketPainter extends CustomPainter {
+  final int parentCount;
+  final int childCount;
+  final Color color;
+
+  _MiniBracketPainter({
+    required this.parentCount,
+    required this.childCount,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final h = size.height;
+    final w = size.width;
+    final midX = w / 2;
+
+    for (var i = 0; i < parentCount; i++) {
+      final parentY = (i + 0.5) * h / parentCount;
+      final sireIdx = i * 2;
+      final damIdx = i * 2 + 1;
+      if (sireIdx >= childCount) break;
+
+      final sireY = (sireIdx + 0.5) * h / childCount;
+      final damY =
+          damIdx < childCount ? (damIdx + 0.5) * h / childCount : sireY;
+
+      canvas.drawLine(Offset(0, parentY), Offset(midX, parentY), paint);
+      canvas.drawLine(Offset(midX, sireY), Offset(midX, damY), paint);
+      canvas.drawLine(Offset(midX, sireY), Offset(w, sireY), paint);
+      if (damIdx < childCount) {
+        canvas.drawLine(Offset(midX, damY), Offset(w, damY), paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MiniBracketPainter old) =>
+      parentCount != old.parentCount ||
+      childCount != old.childCount ||
+      color != old.color;
 }
 
 /// A single photo tile in the gallery grid with context menu.
