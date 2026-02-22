@@ -7,7 +7,7 @@ import '../../widgets/demo_write_guard.dart';
 
 /// Screen for managing custom field definitions.
 /// Users can create, edit, reorder, and delete custom fields
-/// that appear on their animal records, contacts, or pedigree views.
+/// that appear on their animal records or contacts.
 class CustomFieldsScreen extends StatefulWidget {
   const CustomFieldsScreen({super.key});
 
@@ -22,15 +22,13 @@ class _CustomFieldsScreenState extends State<CustomFieldsScreen>
   static const _entityTypes = [
     CustomFieldEntityType.animal,
     CustomFieldEntityType.contact,
-    CustomFieldEntityType.pedigree,
   ];
 
-  static const _entityLabels = ['Animals', 'Contacts', 'Pedigrees'];
+  static const _entityLabels = ['Animals', 'Contacts'];
 
   static const _entityIcons = [
     Icons.pets,
     Icons.people,
-    Icons.account_tree,
   ];
 
   @override
@@ -289,6 +287,25 @@ class _CustomFieldCard extends StatelessWidget {
                 ),
               ),
             ],
+            if (field.showInPedigree &&
+                field.entityType == CustomFieldEntityType.animal) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.indigo.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Pedigree',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.indigo.shade800,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
             if (field.fieldType == CustomFieldType.dropdown) ...[
               const SizedBox(width: 8),
               Text(
@@ -356,6 +373,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
   final _optionController = TextEditingController();
   CustomFieldType _selectedType = CustomFieldType.text;
   bool _required = false;
+  bool _showInPedigree = false;
   List<String> _options = [];
 
   @override
@@ -365,6 +383,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
       _nameController.text = widget.field!.name;
       _selectedType = widget.field!.fieldType;
       _required = widget.field!.required;
+      _showInPedigree = widget.field!.showInPedigree;
       _options = List.from(widget.field!.options);
     }
   }
@@ -422,6 +441,15 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
                   onChanged: (v) => setState(() => _required = v),
                   contentPadding: EdgeInsets.zero,
                 ),
+                if (widget.entityType == CustomFieldEntityType.animal)
+                  SwitchListTile(
+                    title: const Text('Show in Pedigree'),
+                    subtitle: const Text(
+                        'Display this field on pedigree tree cards'),
+                    value: _showInPedigree,
+                    onChanged: (v) => setState(() => _showInPedigree = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
                 if (_selectedType == CustomFieldType.dropdown) ...[
                   const Divider(),
                   Text(
@@ -523,6 +551,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
             name: _nameController.text.trim(),
             fieldType: _selectedType,
             required: _required,
+            showInPedigree: _showInPedigree,
             options: _options,
           )
         : CustomFieldDefinition(
@@ -530,6 +559,7 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
             fieldType: _selectedType,
             entityType: widget.entityType,
             required: _required,
+            showInPedigree: _showInPedigree,
             options: _options,
           );
 
@@ -543,8 +573,6 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
         return 'Animal';
       case CustomFieldEntityType.contact:
         return 'Contact';
-      case CustomFieldEntityType.pedigree:
-        return 'Pedigree';
     }
   }
 
@@ -554,8 +582,6 @@ class _CustomFieldDialogState extends State<_CustomFieldDialog> {
         return 'e.g., Ear Tag, Horn Status, Fleece Weight';
       case CustomFieldEntityType.contact:
         return 'e.g., Membership ID, Region, Licence Number';
-      case CustomFieldEntityType.pedigree:
-        return 'e.g., Registry Body, Certificate Number, Breed Line';
     }
   }
 
