@@ -49,7 +49,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
     - Read-only users can only perform GET requests.
     - Contributors, admins, and owners can perform all CRUD operations.
     """
-    queryset = Animal.objects.all()
+    queryset = Animal.objects.select_related('sire', 'dam', 'breeder', 'current_owner').all()
     permission_classes = [ReadOnlyForReadOnlyUsers]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['species', 'breed', 'sex', 'status']
@@ -350,7 +350,7 @@ class AnimalViewSet(viewsets.ModelViewSet):
         }
 
         # ── Recent animals (lightweight, most recently created, limit 5)
-        recent_qs = qs.order_by('-created_at')[:5]
+        recent_qs = qs.select_related('sire', 'dam', 'breeder', 'current_owner').order_by('-created_at')[:5]
         recent_animals = AnimalListSerializer(
             recent_qs, many=True, context={'request': request},
         ).data

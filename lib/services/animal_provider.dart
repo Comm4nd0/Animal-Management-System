@@ -314,6 +314,8 @@ class AnimalProvider extends ChangeNotifier {
               : null,
           color: m['color'] as String?,
           registrationNumber: m['registration_number'] as String?,
+          sireId: m['sire'] as String?,
+          damId: m['dam'] as String?,
           status: AnimalStatus.values[m['status'] as int? ?? 0],
           geneticTraits: {},
           customFields: {},
