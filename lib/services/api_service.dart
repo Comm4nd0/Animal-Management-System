@@ -658,6 +658,218 @@ class ApiService {
     };
   }
 
+  // ─── Weight Records ──────────────────────────────────────────
+
+  Future<List<WeightRecord>> getWeightRecords(String animalId) async {
+    final data = await _get('/weight-records/', queryParams: {'animal': animalId});
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) => _weightRecordFromApi(m)).toList();
+  }
+
+  Future<WeightRecord> createWeightRecord(WeightRecord record) async {
+    final data = await _post('/weight-records/', _weightRecordToApi(record));
+    return _weightRecordFromApi(data);
+  }
+
+  Future<void> deleteWeightRecord(String id) async {
+    await _delete('/weight-records/$id/');
+  }
+
+  // ─── Show Results ───────────────────────────────────────────
+
+  Future<List<ShowResult>> getShowResults(String animalId) async {
+    final data = await _get('/show-results/', queryParams: {'animal': animalId});
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) => _showResultFromApi(m)).toList();
+  }
+
+  Future<ShowResult> createShowResult(ShowResult result) async {
+    final data = await _post('/show-results/', _showResultToApi(result));
+    return _showResultFromApi(data);
+  }
+
+  Future<void> deleteShowResult(String id) async {
+    await _delete('/show-results/$id/');
+  }
+
+  // ─── Financial Records ──────────────────────────────────────
+
+  Future<List<FinancialRecord>> getFinancialRecords(String animalId) async {
+    final data = await _get('/financial-records/', queryParams: {'animal': animalId});
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) => _financialRecordFromApi(m)).toList();
+  }
+
+  Future<FinancialRecord> createFinancialRecord(FinancialRecord record) async {
+    final data = await _post('/financial-records/', _financialRecordToApi(record));
+    return _financialRecordFromApi(data);
+  }
+
+  Future<void> deleteFinancialRecord(String id) async {
+    await _delete('/financial-records/$id/');
+  }
+
+  // ─── Document Attachments ───────────────────────────────────
+
+  Future<List<DocumentAttachment>> getDocumentAttachments(String animalId) async {
+    final data = await _get('/documents/', queryParams: {'animal': animalId});
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) => _documentAttachmentFromApi(m)).toList();
+  }
+
+  Future<DocumentAttachment> createDocumentAttachment(DocumentAttachment doc) async {
+    final data = await _post('/documents/', _documentAttachmentToApi(doc));
+    return _documentAttachmentFromApi(data);
+  }
+
+  Future<void> deleteDocumentAttachment(String id) async {
+    await _delete('/documents/$id/');
+  }
+
+  // ─── Animal Images ──────────────────────────────────────────
+
+  Future<List<AnimalImage>> getAnimalImages(String animalId) async {
+    final data = await _get('/animals/$animalId/images/');
+    final results = data is List ? data : (data['results'] as List? ?? []);
+    return results.map((m) => _animalImageFromApi(m)).toList();
+  }
+
+  Future<AnimalImage> uploadAnimalImage(String animalId, List<int> imageBytes, String fileName, {String caption = '', bool isProfile = false}) async {
+    final uri = Uri.parse('$baseUrl/animals/$animalId/images/');
+    final request = http.MultipartRequest('POST', uri);
+    request.headers.addAll({
+      if (authToken != null) 'Authorization': 'Token $authToken',
+    });
+    request.files.add(http.MultipartFile.fromBytes('image', imageBytes, filename: fileName));
+    request.fields['caption'] = caption;
+    request.fields['is_profile'] = isProfile ? 'true' : 'false';
+    final streamed = await request.send();
+    final body = await streamed.stream.bytesToString();
+    if (streamed.statusCode >= 200 && streamed.statusCode < 300) {
+      return _animalImageFromApi(jsonDecode(body));
+    }
+    throw ApiException(streamed.statusCode, body);
+  }
+
+  Future<void> deleteAnimalImage(String animalId, String imageId) async {
+    await _delete('/animals/$animalId/images/$imageId/');
+  }
+
+  Future<AnimalImage> setAnimalProfileImage(String animalId, String imageId) async {
+    final data = await _post('/animals/$animalId/images/$imageId/set-profile/', {});
+    return _animalImageFromApi(data);
+  }
+
+  // ─── Serialization Helpers (continued) ────────────────────
+
+  WeightRecord _weightRecordFromApi(Map<String, dynamic> m) {
+    return WeightRecord(
+      id: m['id'] as String,
+      animalId: m['animal'] as String,
+      date: DateTime.parse(m['date'] as String),
+      weight: m['weight'] != null ? double.tryParse(m['weight'].toString()) : null,
+      height: m['height'] != null ? double.tryParse(m['height'].toString()) : null,
+      notes: m['notes'] as String? ?? '',
+      createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'] as String) : null,
+    );
+  }
+
+  Map<String, dynamic> _weightRecordToApi(WeightRecord r) {
+    return {
+      'animal': r.animalId,
+      'date': r.date.toIso8601String().split('T').first,
+      'weight': r.weight,
+      'height': r.height,
+      'notes': r.notes,
+    };
+  }
+
+  ShowResult _showResultFromApi(Map<String, dynamic> m) {
+    return ShowResult(
+      id: m['id'] as String,
+      animalId: m['animal'] as String,
+      showName: m['show_name'] as String,
+      showDate: DateTime.parse(m['show_date'] as String),
+      className: m['class_name'] as String? ?? '',
+      placement: ShowPlacement.fromApiValue(m['placement'] as int? ?? 99),
+      judge: m['judge'] as String? ?? '',
+      points: m['points'] != null ? double.tryParse(m['points'].toString()) : null,
+      notes: m['notes'] as String? ?? '',
+      createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'] as String) : null,
+    );
+  }
+
+  Map<String, dynamic> _showResultToApi(ShowResult r) {
+    return {
+      'animal': r.animalId,
+      'show_name': r.showName,
+      'show_date': r.showDate.toIso8601String().split('T').first,
+      'class_name': r.className,
+      'placement': r.placement.apiValue,
+      'judge': r.judge,
+      'points': r.points,
+      'notes': r.notes,
+    };
+  }
+
+  FinancialRecord _financialRecordFromApi(Map<String, dynamic> m) {
+    return FinancialRecord(
+      id: m['id'] as String,
+      animalId: m['animal'] as String,
+      date: DateTime.parse(m['date'] as String),
+      transactionType: TransactionType.values[m['transaction_type'] as int? ?? 0],
+      category: FinancialCategory.fromApiValue(m['category'] as int? ?? 99),
+      amount: double.tryParse(m['amount'].toString()) ?? 0,
+      description: m['description'] as String? ?? '',
+      receiptPath: m['receipt'] as String?,
+      createdAt: m['created_at'] != null ? DateTime.tryParse(m['created_at'] as String) : null,
+    );
+  }
+
+  Map<String, dynamic> _financialRecordToApi(FinancialRecord r) {
+    return {
+      'animal': r.animalId,
+      'date': r.date.toIso8601String().split('T').first,
+      'transaction_type': r.transactionType.index,
+      'category': r.category.apiValue,
+      'amount': r.amount,
+      'description': r.description,
+    };
+  }
+
+  DocumentAttachment _documentAttachmentFromApi(Map<String, dynamic> m) {
+    return DocumentAttachment(
+      id: m['id'] as String,
+      animalId: m['animal'] as String,
+      title: m['title'] as String,
+      documentType: DocumentType.fromApiValue(m['document_type'] as int? ?? 99),
+      filePath: m['file'] as String? ?? '',
+      notes: m['notes'] as String? ?? '',
+      uploadedAt: m['uploaded_at'] != null ? DateTime.tryParse(m['uploaded_at'] as String) : null,
+    );
+  }
+
+  Map<String, dynamic> _documentAttachmentToApi(DocumentAttachment d) {
+    return {
+      'animal': d.animalId,
+      'title': d.title,
+      'document_type': d.documentType.apiValue,
+      'file': d.filePath,
+      'notes': d.notes,
+    };
+  }
+
+  AnimalImage _animalImageFromApi(Map<String, dynamic> m) {
+    return AnimalImage(
+      id: m['id'] as String,
+      animalId: m['animal'] as String,
+      imagePath: m['image'] as String? ?? '',
+      caption: m['caption'] as String? ?? '',
+      isProfile: m['is_profile'] as bool? ?? false,
+      createdAt: m['uploaded_at'] != null ? DateTime.tryParse(m['uploaded_at'] as String) : null,
+    );
+  }
+
   // ─── Background Tasks ─────────────────────────────────────
 
   Future<Map<String, dynamic>> createPedigreeTask(String animalId, {int generations = 5}) async {
