@@ -21,7 +21,7 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
   List<BreedingSuggestion> _matches = [];
   bool _isLoading = false;
   bool _filterSameBreedOnly = false;
-  int _taskProgress = 0;
+  BackgroundTaskStatus? _taskStatus;
   String? _errorMessage;
 
   // Stud typeahead state
@@ -119,7 +119,7 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
       _isLoading = true;
       _matches = [];
       _errorMessage = null;
-      _taskProgress = 0;
+      _taskStatus = null;
     });
 
     final provider = context.read<AnimalProvider>();
@@ -151,7 +151,7 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
       maxCoi: 100.0,
       onProgress: (status) {
         if (mounted) {
-          setState(() => _taskProgress = status.progress);
+          setState(() => _taskStatus = status);
         }
       },
     );
@@ -235,9 +235,6 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
       ),
       body: Consumer<AnimalProvider>(
         builder: (context, provider, _) {
-          final shouldShowStudSuggestions =
-              _studShowSuggestions && _selectedStudId == null;
-
           return Column(
             children: [
               // Stud selection + filter
@@ -246,127 +243,44 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    TextFormField(
+                    _buildAnimalTypeahead(
+                      label: 'Select Stud (Male)',
+                      icon: Icons.male,
+                      iconColor: AppTheme.maleColor,
+                      selectedId: _selectedStudId,
+                      suggestions: _studSuggestions,
+                      isLoading: _studSearchLoading,
                       controller: _studSearchController,
                       focusNode: _studFocusNode,
-                      decoration: InputDecoration(
-                        labelText: 'Select Stud (Male)',
-                        prefixIcon:
-                            const Icon(Icons.male, color: AppTheme.maleColor),
-                        hintText: 'Type name or reg number to search...',
-                        suffixIcon: _selectedStudId != null
-                            ? IconButton(
-                                icon: const Icon(Icons.clear),
-                                tooltip: 'Clear selection',
-                                onPressed: () {
-                                  setState(() {
-                                    _selectedStudId = null;
-                                    _studSearchController.clear();
-                                    _studSuggestions = [];
-                                    _matches = [];
-                                  });
-                                },
-                              )
-                            : _studSearchLoading
-                                ? const Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    ),
-                                  )
-                                : null,
-                      ),
-                      onChanged: (value) {
-                        if (_selectedStudId != null) {
-                          setState(() {
-                            _selectedStudId = null;
-                            _studShowSuggestions = true;
-                            _matches = [];
-                          });
-                          _searchStudCandidates();
-                        }
+                      showSuggestions: _studShowSuggestions,
+                      onSelected: (animal) {
+                        setState(() {
+                          _selectedStudId = animal.id;
+                          _studSearchController.text =
+                              _formatAnimalDisplay(animal);
+                          _studShowSuggestions = false;
+                          _studFocusNode.unfocus();
+                          _matches = [];
+                        });
+                        _loadMatches();
+                      },
+                      onCleared: () {
+                        setState(() {
+                          _selectedStudId = null;
+                          _studSearchController.clear();
+                          _studSuggestions = [];
+                          _matches = [];
+                        });
+                      },
+                      onSelectionInvalidated: () {
+                        setState(() {
+                          _selectedStudId = null;
+                          _studShowSuggestions = true;
+                          _matches = [];
+                        });
+                        _searchStudCandidates();
                       },
                     ),
-                    if (shouldShowStudSuggestions &&
-                        _studSuggestions.isNotEmpty)
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 200),
-                        margin: const EdgeInsets.only(top: 2),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).cardColor,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.08),
-                              blurRadius: 4,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: ListView.builder(
-                          padding: EdgeInsets.zero,
-                          shrinkWrap: true,
-                          itemCount: _studSuggestions.length,
-                          itemBuilder: (context, index) {
-                            final animal = _studSuggestions[index];
-                            return ListTile(
-                              dense: true,
-                              leading: const Icon(
-                                Icons.male,
-                                size: 20,
-                                color: AppTheme.maleColor,
-                              ),
-                              title: Text(
-                                animal.name,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
-                              ),
-                              subtitle: Text(
-                                [
-                                  if (animal.registrationNumber != null &&
-                                      animal.registrationNumber!.isNotEmpty)
-                                    'Reg: ${animal.registrationNumber}',
-                                  animal.breed,
-                                ].join(' · '),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                              onTap: () {
-                                setState(() {
-                                  _selectedStudId = animal.id;
-                                  _studSearchController.text =
-                                      _formatAnimalDisplay(animal);
-                                  _studShowSuggestions = false;
-                                  _studFocusNode.unfocus();
-                                  _matches = [];
-                                });
-                                _loadMatches();
-                              },
-                            );
-                          },
-                        ),
-                      ),
-                    if (shouldShowStudSuggestions &&
-                        _studSuggestions.isEmpty &&
-                        !_studSearchLoading &&
-                        _studSearchController.text.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          'No matching males found',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ),
                     if (_selectedStudId != null && _matches.isNotEmpty)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
@@ -408,34 +322,410 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
     );
   }
 
+  Widget _buildAnimalTypeahead({
+    required String label,
+    required IconData icon,
+    required Color iconColor,
+    required String? selectedId,
+    required List<Animal> suggestions,
+    required bool isLoading,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    required bool showSuggestions,
+    required ValueChanged<Animal> onSelected,
+    required VoidCallback onCleared,
+    required VoidCallback onSelectionInvalidated,
+  }) {
+    final shouldShow = showSuggestions && selectedId == null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextFormField(
+          controller: controller,
+          focusNode: focusNode,
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: Icon(icon, color: iconColor),
+            hintText: 'Type name or reg number to search...',
+            suffixIcon: selectedId != null
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    tooltip: 'Clear selection',
+                    onPressed: onCleared,
+                  )
+                : isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : null,
+          ),
+          onChanged: (value) {
+            if (selectedId != null) {
+              onSelectionInvalidated();
+            }
+          },
+        ),
+        if (shouldShow && suggestions.isNotEmpty)
+          Container(
+            constraints: const BoxConstraints(maxHeight: 200),
+            margin: const EdgeInsets.only(top: 2),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              itemCount: suggestions.length,
+              itemBuilder: (context, index) {
+                final animal = suggestions[index];
+                return ListTile(
+                  dense: true,
+                  leading: Icon(
+                    icon,
+                    size: 20,
+                    color: iconColor,
+                  ),
+                  title: Text(
+                    animal.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    [
+                      if (animal.registrationNumber != null &&
+                          animal.registrationNumber!.isNotEmpty)
+                        'Reg: ${animal.registrationNumber}',
+                      animal.breed,
+                    ].join(' · '),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  onTap: () => onSelected(animal),
+                );
+              },
+            ),
+          ),
+        if (shouldShow &&
+            suggestions.isEmpty &&
+            !isLoading &&
+            controller.text.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'No matching males found',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildLoadingState() {
+    final status = _taskStatus;
+    final progress = status?.progress ?? 0;
+    final fraction = (progress / 100).clamp(0.0, 1.0);
+    final hasProgress = progress > 0;
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          Text(
-            _taskProgress > 0
-                ? 'Analysing compatibility... $_taskProgress%'
-                : 'Analysing compatibility...',
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade600,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Card(
+          elevation: 3,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header icon and title
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.biotech,
+                    color: AppTheme.primaryColor,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Analysing Compatibility',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Computing COI for all potential mates',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    height: 12,
+                    child: Stack(
+                      children: [
+                        // Background
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        // Progress fill
+                        if (hasProgress)
+                          FractionallySizedBox(
+                            widthFactor: fraction,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    AppTheme.primaryColor,
+                                    AppTheme.secondaryColor,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          )
+                        else
+                          // Indeterminate shimmer for pre-progress phase
+                          const LinearProgressIndicator(
+                            minHeight: 12,
+                            backgroundColor: Colors.transparent,
+                            color: AppTheme.primaryColor,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Percentage and status row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      hasProgress ? '$progress%' : 'Starting...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: hasProgress
+                            ? AppTheme.primaryColor
+                            : Colors.grey.shade500,
+                      ),
+                    ),
+                    if (status != null && status.etaDisplay.isNotEmpty)
+                      Text(
+                        status.etaDisplay,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                  ],
+                ),
+
+                // Status message
+                if (status != null &&
+                    status.statusMessage.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Text(
+                      status.statusMessage,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+
+                // Items processed stats
+                if (status != null && status.totalItems > 0) ...[
+                  const SizedBox(height: 12),
+                  _buildProgressStat(
+                    icon: Icons.pets,
+                    label: 'Females analysed',
+                    value: '${status.processedItems} / ${status.totalItems}',
+                  ),
+                ],
+
+                // Stage indicator
+                const SizedBox(height: 16),
+                _buildProgressStages(progress),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Computing COI for all potential mates.\n'
-            'This runs in the background and will\nupdate automatically when ready.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade500,
-            ),
-          ),
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildProgressStat({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.grey.shade500),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProgressStages(int progress) {
+    final stages = [
+      _ProgressStage('Fetching pedigrees', 0, 25),
+      _ProgressStage('Computing COI', 25, 70),
+      _ProgressStage('Scoring compatibility', 70, 90),
+      _ProgressStage('Ranking results', 90, 100),
+    ];
+
+    return Column(
+      children: [
+        Row(
+          children: stages.asMap().entries.map((entry) {
+            final index = entry.key;
+            final stage = entry.value;
+            final isActive =
+                progress >= stage.startPercent && progress < stage.endPercent;
+            final isComplete = progress >= stage.endPercent;
+
+            return Expanded(
+              child: Row(
+                children: [
+                  if (index > 0)
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        color: isComplete || isActive
+                            ? AppTheme.primaryColor
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isComplete
+                          ? AppTheme.primaryColor
+                          : isActive
+                              ? AppTheme.primaryColor.withValues(alpha: 0.2)
+                              : Colors.grey.shade200,
+                      border: Border.all(
+                        color: isComplete || isActive
+                            ? AppTheme.primaryColor
+                            : Colors.grey.shade400,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: isComplete
+                        ? const Icon(Icons.check,
+                            size: 12, color: Colors.white)
+                        : isActive
+                            ? const SizedBox(
+                                width: 10,
+                                height: 10,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              )
+                            : null,
+                  ),
+                  if (index < stages.length - 1)
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        color: isComplete
+                            ? AppTheme.primaryColor
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: stages.map((stage) {
+            final isActive = progress >= stage.startPercent &&
+                progress < stage.endPercent;
+            final isComplete = progress >= stage.endPercent;
+            return Expanded(
+              child: Text(
+                stage.label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight:
+                      isActive ? FontWeight.w600 : FontWeight.normal,
+                  color: isComplete
+                      ? AppTheme.primaryColor
+                      : isActive
+                          ? Colors.grey.shade800
+                          : Colors.grey.shade500,
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
     );
   }
 
@@ -572,6 +862,14 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
       ],
     );
   }
+}
+
+class _ProgressStage {
+  final String label;
+  final int startPercent;
+  final int endPercent;
+
+  const _ProgressStage(this.label, this.startPercent, this.endPercent);
 }
 
 /// Traffic-light colour for a COI value.
