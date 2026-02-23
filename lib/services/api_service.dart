@@ -110,12 +110,14 @@ class ApiService {
     String? breed,
     String? search,
     int? sex,
+    int? status,
   }) async {
     final params = <String, String>{};
     if (species != null) params['species'] = species;
     if (breed != null) params['breed'] = breed;
     if (search != null) params['search'] = search;
     if (sex != null) params['sex'] = '$sex';
+    if (status != null) params['status'] = '$status';
 
     final results = await _getAllPaginated('/animals/',
         queryParams: params.isEmpty ? null : params);

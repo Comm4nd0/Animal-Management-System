@@ -146,13 +146,16 @@ def generate_breeding_suggestions(animal_id, max_results=10, max_coi=12.5):
     except Animal.DoesNotExist:
         return []
 
-    # Get potential mates: opposite sex, same species, alive
+    # Get potential mates: opposite sex, same species, alive, same account
     opposite_sex = Animal.Sex.FEMALE if animal.sex == Animal.Sex.MALE else Animal.Sex.MALE
-    candidates = Animal.objects.filter(
-        sex=opposite_sex,
-        species=animal.species,
-        status=Animal.Status.ALIVE,
-    ).exclude(pk=animal.pk)
+    candidate_filter = {
+        'sex': opposite_sex,
+        'species': animal.species,
+        'status': Animal.Status.ALIVE,
+    }
+    if animal.account_id is not None:
+        candidate_filter['account'] = animal.account
+    candidates = Animal.objects.filter(**candidate_filter).exclude(pk=animal.pk)
 
     suggestions = []
     for mate in candidates:
