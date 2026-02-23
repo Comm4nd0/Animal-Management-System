@@ -58,6 +58,11 @@ class _DataAuditScreenState extends State<DataAuditScreen> {
     return _issues!.where((i) => i.code == _filterCode).toList();
   }
 
+  int get _progressPercent {
+    if (_total <= 0) return 0;
+    return ((_processed / _total) * 100).round().clamp(0, 100);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -67,13 +72,12 @@ class _DataAuditScreenState extends State<DataAuditScreen> {
       body: Column(
         children: [
           _buildHeader(),
-          if (_isRunning) _buildProgress(),
           if (_issues != null && !_isRunning) _buildFilterBar(),
           Expanded(
-            child: _issues == null && !_isRunning
-                ? _buildStartState()
-                : _isRunning
-                    ? const SizedBox.shrink()
+            child: _isRunning
+                ? _buildProgressCard()
+                : _issues == null
+                    ? _buildStartState()
                     : _filteredIssues.isEmpty
                         ? _buildCleanState()
                         : _buildIssuesList(),
@@ -139,27 +143,294 @@ class _DataAuditScreenState extends State<DataAuditScreen> {
     );
   }
 
-  Widget _buildProgress() {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        children: [
-          LinearProgressIndicator(
-            value: _total > 0 ? _processed / _total : null,
-            backgroundColor: Colors.grey.shade200,
-            valueColor: const AlwaysStoppedAnimation(AppTheme.primaryColor),
+  // ─── Professional progress card ───────────────────────────────
+
+  Widget _buildProgressCard() {
+    final progress = _progressPercent;
+    final fraction = (progress / 100).clamp(0.0, 1.0);
+    final hasProgress = progress > 0;
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Card(
+          elevation: 3,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header icon and title
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.health_and_safety,
+                    color: AppTheme.primaryColor,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Auditing Pedigree Data',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Scanning all animals for integrity issues',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Gradient progress bar
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: SizedBox(
+                    height: 12,
+                    child: Stack(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                        ),
+                        if (hasProgress)
+                          FractionallySizedBox(
+                            widthFactor: fraction,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    AppTheme.primaryColor,
+                                    AppTheme.secondaryColor,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          )
+                        else
+                          const LinearProgressIndicator(
+                            minHeight: 12,
+                            backgroundColor: Colors.transparent,
+                            color: AppTheme.primaryColor,
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Percentage + animals scanned row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      hasProgress ? '$progress%' : 'Loading...',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: hasProgress
+                            ? AppTheme.primaryColor
+                            : Colors.grey.shade500,
+                      ),
+                    ),
+                    if (_total > 0)
+                      Text(
+                        '$_processed of $_total animals',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // Checklist of audit checks
+                _buildCheckList(progress),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            _total > 0
-                ? 'Checking animal $_processed of $_total...'
-                : 'Loading animals...',
-            style: TextStyle(color: Colors.grey.shade600),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCheckList(int progress) {
+    final checks = [
+      _AuditCheck(
+        icon: Icons.person_off,
+        label: 'Self-reference checks',
+        description: 'Sire/dam cannot reference self',
+        startPercent: 0,
+        endPercent: 12,
+      ),
+      _AuditCheck(
+        icon: Icons.people_outline,
+        label: 'Same parent detection',
+        description: 'Sire and dam must be different animals',
+        startPercent: 12,
+        endPercent: 24,
+      ),
+      _AuditCheck(
+        icon: Icons.link_off,
+        label: 'Orphan reference checks',
+        description: 'Parent records must exist in database',
+        startPercent: 24,
+        endPercent: 38,
+      ),
+      _AuditCheck(
+        icon: Icons.swap_horiz,
+        label: 'Sex mismatch validation',
+        description: 'Sires must be male, dams must be female',
+        startPercent: 38,
+        endPercent: 52,
+      ),
+      _AuditCheck(
+        icon: Icons.calendar_month,
+        label: 'Date consistency checks',
+        description: 'Parents born before offspring, death after birth',
+        startPercent: 52,
+        endPercent: 68,
+      ),
+      _AuditCheck(
+        icon: Icons.loop,
+        label: 'Circular pedigree detection',
+        description: 'No loops in ancestry chain',
+        startPercent: 68,
+        endPercent: 85,
+      ),
+      _AuditCheck(
+        icon: Icons.copy,
+        label: 'Duplicate registrations',
+        description: 'Registration numbers must be unique',
+        startPercent: 85,
+        endPercent: 100,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Checks being performed',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        ...checks.map((check) => _buildCheckRow(check, progress)),
+      ],
+    );
+  }
+
+  Widget _buildCheckRow(_AuditCheck check, int progress) {
+    final isComplete = progress >= check.endPercent;
+    final isActive =
+        progress >= check.startPercent && progress < check.endPercent;
+
+    final Color iconBgColor;
+    final Widget statusWidget;
+
+    if (isComplete) {
+      iconBgColor = AppTheme.primaryColor;
+      statusWidget = const Icon(Icons.check, size: 14, color: Colors.white);
+    } else if (isActive) {
+      iconBgColor = AppTheme.primaryColor.withValues(alpha: 0.15);
+      statusWidget = const SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          color: AppTheme.primaryColor,
+        ),
+      );
+    } else {
+      iconBgColor = Colors.grey.shade200;
+      statusWidget = const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          // Status circle
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: iconBgColor,
+              border: Border.all(
+                color: isComplete || isActive
+                    ? AppTheme.primaryColor
+                    : Colors.grey.shade400,
+                width: 1.5,
+              ),
+            ),
+            child: Center(child: statusWidget),
+          ),
+          const SizedBox(width: 12),
+          // Check icon
+          Icon(
+            check.icon,
+            size: 18,
+            color: isComplete
+                ? AppTheme.primaryColor
+                : isActive
+                    ? Colors.grey.shade800
+                    : Colors.grey.shade400,
+          ),
+          const SizedBox(width: 10),
+          // Label + description
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  check.label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight:
+                        isActive ? FontWeight.w600 : FontWeight.normal,
+                    color: isComplete
+                        ? AppTheme.primaryColor
+                        : isActive
+                            ? Colors.grey.shade900
+                            : Colors.grey.shade500,
+                  ),
+                ),
+                Text(
+                  check.description,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isComplete || isActive
+                        ? Colors.grey.shade600
+                        : Colors.grey.shade400,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+
+  // ─── Summary + filter ─────────────────────────────────────────
 
   Widget _buildSummary() {
     final errors =
@@ -265,6 +536,8 @@ class _DataAuditScreenState extends State<DataAuditScreen> {
     }
   }
 
+  // ─── Empty / clean / issues states ────────────────────────────
+
   Widget _buildStartState() {
     return Center(
       child: Column(
@@ -326,6 +599,24 @@ class _DataAuditScreenState extends State<DataAuditScreen> {
       },
     );
   }
+}
+
+// ─── Helper models ────────────────────────────────────────────
+
+class _AuditCheck {
+  final IconData icon;
+  final String label;
+  final String description;
+  final int startPercent;
+  final int endPercent;
+
+  const _AuditCheck({
+    required this.icon,
+    required this.label,
+    required this.description,
+    required this.startPercent,
+    required this.endPercent,
+  });
 }
 
 class _SummaryChip extends StatelessWidget {
