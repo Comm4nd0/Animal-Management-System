@@ -164,6 +164,11 @@ class SexDistributionChart extends StatelessWidget {
     final females = animals.where((a) => a.sex == Sex.female).length;
     final unknown = animals.where((a) => a.sex == Sex.unknown).length;
     final total = animals.length;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 600;
+    final pieRadius = isCompact ? 40.0 : 50.0;
+    final centerRadius = isCompact ? 24.0 : 30.0;
+    final titleFontSize = isCompact ? 10.0 : 12.0;
 
     final sections = <PieChartSectionData>[];
     final legends = <_LegendItem>[];
@@ -173,9 +178,9 @@ class SexDistributionChart extends StatelessWidget {
         value: males.toDouble(),
         title: '${(males / total * 100).round()}%',
         color: AppTheme.maleColor,
-        radius: 50,
-        titleStyle: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        radius: pieRadius,
+        titleStyle: TextStyle(
+            fontSize: titleFontSize, fontWeight: FontWeight.bold, color: Colors.white),
       ));
       legends.add(_LegendItem('Males ($males)', AppTheme.maleColor));
     }
@@ -184,9 +189,9 @@ class SexDistributionChart extends StatelessWidget {
         value: females.toDouble(),
         title: '${(females / total * 100).round()}%',
         color: AppTheme.femaleColor,
-        radius: 50,
-        titleStyle: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        radius: pieRadius,
+        titleStyle: TextStyle(
+            fontSize: titleFontSize, fontWeight: FontWeight.bold, color: Colors.white),
       ));
       legends.add(_LegendItem('Females ($females)', AppTheme.femaleColor));
     }
@@ -195,60 +200,28 @@ class SexDistributionChart extends StatelessWidget {
         value: unknown.toDouble(),
         title: '${(unknown / total * 100).round()}%',
         color: Colors.grey,
-        radius: 50,
-        titleStyle: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        radius: pieRadius,
+        titleStyle: TextStyle(
+            fontSize: titleFontSize, fontWeight: FontWeight.bold, color: Colors.white),
       ));
       legends.add(_LegendItem('Unknown ($unknown)', Colors.grey));
     }
 
+    final pieChart = PieChart(
+      PieChartData(
+        sections: sections,
+        sectionsSpace: 2,
+        centerSpaceRadius: centerRadius,
+      ),
+    );
+
+    final legendWidget = _buildLegendList(legends);
+
     return _ChartCard(
       title: 'Sex Distribution',
-      child: SizedBox(
-        height: 180,
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: PieChart(
-                PieChartData(
-                  sections: sections,
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 30,
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: legends
-                    .map((l) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: l.color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(l.label,
-                                    style: const TextStyle(fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
+      child: _ResponsivePieLayout(
+        pieChart: pieChart,
+        legend: legendWidget,
       ),
     );
   }
@@ -276,6 +249,10 @@ class BreedDistributionChart extends StatelessWidget {
     if (top.isEmpty) return const SizedBox.shrink();
 
     final maxVal = top.first.value.toDouble();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final barWidth = screenWidth < 400 ? 14.0 : screenWidth < 600 ? 18.0 : 22.0;
+    final labelWidth = screenWidth < 400 ? 40.0 : 60.0;
+    final labelMaxChars = screenWidth < 400 ? 6 : 10;
 
     return _ChartCard(
       title: 'Breed Distribution',
@@ -316,10 +293,10 @@ class BreedDistributionChart extends StatelessWidget {
                       return SideTitleWidget(
                         axisSide: meta.axisSide,
                         child: SizedBox(
-                          width: 60,
+                          width: labelWidth,
                           child: Text(
-                            label.length > 10
-                                ? '${label.substring(0, 9)}...'
+                            label.length > labelMaxChars
+                                ? '${label.substring(0, labelMaxChars - 1)}...'
                                 : label,
                             style: const TextStyle(fontSize: 9),
                             textAlign: TextAlign.center,
@@ -341,7 +318,7 @@ class BreedDistributionChart extends StatelessWidget {
                     BarChartRodData(
                       toY: top[i].value.toDouble(),
                       color: _chartColors[i % _chartColors.length],
-                      width: 22,
+                      width: barWidth,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(4),
                         topRight: Radius.circular(4),
@@ -408,6 +385,8 @@ class AgeDistributionChart extends StatelessWidget {
     if (entries.isEmpty) return const SizedBox.shrink();
 
     final maxVal = entries.map((e) => e.value).reduce(max).toDouble();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final barWidth = screenWidth < 400 ? 16.0 : screenWidth < 600 ? 22.0 : 28.0;
 
     return _ChartCard(
       title: 'Age Distribution',
@@ -442,7 +421,7 @@ class AgeDistributionChart extends StatelessWidget {
                       }
                       return Text(
                         entries[idx].key,
-                        style: const TextStyle(fontSize: 9),
+                        style: TextStyle(fontSize: screenWidth < 400 ? 8 : 9),
                       );
                     },
                   ),
@@ -465,7 +444,7 @@ class AgeDistributionChart extends StatelessWidget {
                     BarChartRodData(
                       toY: entries[i].value.toDouble(),
                       color: AppTheme.primaryColor,
-                      width: 28,
+                      width: barWidth,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(4),
                         topRight: Radius.circular(4),
@@ -728,6 +707,12 @@ class StatusDistributionChart extends StatelessWidget {
       AnimalStatus.transferred: ('Transferred', const Color(0xFF42A5F5)),
     };
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 600;
+    final pieRadius = isCompact ? 40.0 : 50.0;
+    final centerRadius = isCompact ? 24.0 : 30.0;
+    final titleFontSize = isCompact ? 10.0 : 12.0;
+
     final sections = <PieChartSectionData>[];
     final legends = <_LegendItem>[];
 
@@ -737,60 +722,28 @@ class StatusDistributionChart extends StatelessWidget {
         value: entry.value.toDouble(),
         title: '${(entry.value / total * 100).round()}%',
         color: meta.$2,
-        radius: 50,
-        titleStyle: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        radius: pieRadius,
+        titleStyle: TextStyle(
+            fontSize: titleFontSize, fontWeight: FontWeight.bold, color: Colors.white),
       ));
       legends.add(_LegendItem('${meta.$1} (${entry.value})', meta.$2));
     }
 
+    final pieChart = PieChart(
+      PieChartData(
+        sections: sections,
+        sectionsSpace: 2,
+        centerSpaceRadius: centerRadius,
+      ),
+    );
+
+    final legendWidget = _buildLegendList(legends);
+
     return _ChartCard(
       title: 'Status Breakdown',
-      child: SizedBox(
-        height: 180,
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: PieChart(
-                PieChartData(
-                  sections: sections,
-                  sectionsSpace: 2,
-                  centerSpaceRadius: 30,
-                ),
-              ),
-            ),
-            Expanded(
-              flex: 2,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: legends
-                    .map((l) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: l.color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(l.label,
-                                    style: const TextStyle(fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
+      child: _ResponsivePieLayout(
+        pieChart: pieChart,
+        legend: legendWidget,
       ),
     );
   }
@@ -966,6 +919,75 @@ class _ReminderTile extends StatelessWidget {
 // Shared helpers
 // ═══════════════════════════════════════════════════════════════════
 
+/// Builds a legend list from legend items – reused across pie charts.
+Widget _buildLegendList(List<_LegendItem> legends) {
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    mainAxisAlignment: MainAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: legends
+        .map((l) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: l.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(l.label,
+                        style: const TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ))
+        .toList(),
+  );
+}
+
+/// Uses a LayoutBuilder to show chart+legend side-by-side when there's room,
+/// or stacked vertically on narrow screens.
+class _ResponsivePieLayout extends StatelessWidget {
+  final Widget pieChart;
+  final Widget legend;
+
+  const _ResponsivePieLayout({required this.pieChart, required this.legend});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // When the available width is less than 250 (e.g. when two pie charts
+        // are side-by-side on a small screen), stack vertically.
+        if (constraints.maxWidth < 250) {
+          return Column(
+            children: [
+              SizedBox(height: 140, child: pieChart),
+              const SizedBox(height: 8),
+              legend,
+            ],
+          );
+        }
+        return SizedBox(
+          height: 180,
+          child: Row(
+            children: [
+              Expanded(flex: 3, child: pieChart),
+              Expanded(flex: 2, child: legend),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _ChartCard extends StatelessWidget {
   final String title;
   final Widget child;
@@ -1129,6 +1151,12 @@ class AggregatedPieChart extends StatelessWidget {
     final total = data.fold<int>(0, (sum, e) => sum + e.value);
     if (total == 0) return const SizedBox.shrink();
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isCompact = screenWidth < 600;
+    final pieRadius = isCompact ? 40.0 : 50.0;
+    final centerRadius = isCompact ? 24.0 : 30.0;
+    final titleFontSize = isCompact ? 10.0 : 12.0;
+
     final sections = <PieChartSectionData>[];
     final legends = <_LegendItem>[];
 
@@ -1140,58 +1168,26 @@ class AggregatedPieChart extends StatelessWidget {
         value: entry.value.toDouble(),
         title: '${(entry.value / total * 100).round()}%',
         color: color,
-        radius: 50,
-        titleStyle: const TextStyle(
-            fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+        radius: pieRadius,
+        titleStyle: TextStyle(
+            fontSize: titleFontSize, fontWeight: FontWeight.bold, color: Colors.white),
       ));
       legends.add(_LegendItem('${entry.label} (${entry.value})', color));
     }
 
+    final pieChart = PieChart(PieChartData(
+      sections: sections,
+      sectionsSpace: 2,
+      centerSpaceRadius: centerRadius,
+    ));
+
+    final legendWidget = _buildLegendList(legends);
+
     return _ChartCard(
       title: title,
-      child: SizedBox(
-        height: 180,
-        child: Row(
-          children: [
-            Expanded(
-              flex: 3,
-              child: PieChart(PieChartData(
-                sections: sections,
-                sectionsSpace: 2,
-                centerSpaceRadius: 30,
-              )),
-            ),
-            Expanded(
-              flex: 2,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: legends
-                    .map((l) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 12,
-                                height: 12,
-                                decoration: BoxDecoration(
-                                  color: l.color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Flexible(
-                                child: Text(l.label,
-                                    style: const TextStyle(fontSize: 12)),
-                              ),
-                            ],
-                          ),
-                        ))
-                    .toList(),
-              ),
-            ),
-          ],
-        ),
+      child: _ResponsivePieLayout(
+        pieChart: pieChart,
+        legend: legendWidget,
       ),
     );
   }
@@ -1208,6 +1204,11 @@ class AggregatedBarChart extends StatelessWidget {
 
     final maxVal = data.map((e) => e.value).reduce(max).toDouble();
     if (maxVal == 0) return const SizedBox.shrink();
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final barWidth = screenWidth < 400 ? 14.0 : screenWidth < 600 ? 18.0 : 22.0;
+    final labelWidth = screenWidth < 400 ? 40.0 : 60.0;
+    final labelMaxChars = screenWidth < 400 ? 6 : 10;
 
     return _ChartCard(
       title: title,
@@ -1244,10 +1245,10 @@ class AggregatedBarChart extends StatelessWidget {
                       return SideTitleWidget(
                         axisSide: meta.axisSide,
                         child: SizedBox(
-                          width: 60,
+                          width: labelWidth,
                           child: Text(
-                            label.length > 10
-                                ? '${label.substring(0, 9)}...'
+                            label.length > labelMaxChars
+                                ? '${label.substring(0, labelMaxChars - 1)}...'
                                 : label,
                             style: const TextStyle(fontSize: 9),
                             textAlign: TextAlign.center,
@@ -1269,7 +1270,7 @@ class AggregatedBarChart extends StatelessWidget {
                     BarChartRodData(
                       toY: data[i].value.toDouble(),
                       color: _chartColors[i % _chartColors.length],
-                      width: 22,
+                      width: barWidth,
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(4),
                         topRight: Radius.circular(4),
