@@ -38,9 +38,6 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
     _studFocusNode.addListener(() {
       if (_studFocusNode.hasFocus) {
         setState(() => _studShowSuggestions = true);
-        if (_selectedStudId == null) {
-          _searchStudCandidates();
-        }
       } else {
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) setState(() => _studShowSuggestions = false);
@@ -50,7 +47,7 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
     _studSearchController.addListener(() {
       _studDebounce?.cancel();
       _studDebounce = Timer(const Duration(milliseconds: 300), () {
-        if (_selectedStudId == null) {
+        if (_selectedStudId == null && _studSearchController.text.trim().isNotEmpty) {
           _searchStudCandidates();
         }
       });
@@ -125,8 +122,22 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
 
     final provider = context.read<AnimalProvider>();
 
+    // Try the direct API endpoint first (works on all platforms, no Celery needed)
+    try {
+      final suggestions = await provider.getBreedingSuggestions(_selectedStudId!);
+      if (mounted && suggestions.isNotEmpty) {
+        setState(() {
+          _matches = suggestions;
+          _isLoading = false;
+        });
+        return;
+      }
+    } catch (_) {
+      // Direct API unavailable — fall through to alternatives
+    }
+
     if (kIsWeb || provider.isDemoMode) {
-      // Use background task via API to avoid blocking
+      // Use background task via API as fallback
       await _loadMatchesViaBackgroundTask();
     } else {
       // Mobile with local SQLite - use direct computation

@@ -68,9 +68,6 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       final hasFocus = _sireFocusNode.hasFocus;
       if (hasFocus) {
         setState(() => _sireShowSuggestions = true);
-        if (_selectedSireId == null) {
-          _searchParentCandidates(isSire: true);
-        }
       } else {
         // Delay hiding so a tap on a suggestion can register before removal
         Future.delayed(const Duration(milliseconds: 200), () {
@@ -82,9 +79,6 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
       final hasFocus = _damFocusNode.hasFocus;
       if (hasFocus) {
         setState(() => _damShowSuggestions = true);
-        if (_selectedDamId == null) {
-          _searchParentCandidates(isSire: false);
-        }
       } else {
         // Delay hiding so a tap on a suggestion can register before removal
         Future.delayed(const Duration(milliseconds: 200), () {
@@ -95,7 +89,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _sireSearchController.addListener(() {
       _sireDebounce?.cancel();
       _sireDebounce = Timer(const Duration(milliseconds: 300), () {
-        if (_selectedSireId == null) {
+        if (_selectedSireId == null && _sireSearchController.text.trim().isNotEmpty) {
           _searchParentCandidates(isSire: true);
         }
       });
@@ -103,7 +97,7 @@ class _AnimalFormScreenState extends State<AnimalFormScreen> {
     _damSearchController.addListener(() {
       _damDebounce?.cancel();
       _damDebounce = Timer(const Duration(milliseconds: 300), () {
-        if (_selectedDamId == null) {
+        if (_selectedDamId == null && _damSearchController.text.trim().isNotEmpty) {
           _searchParentCandidates(isSire: false);
         }
       });
