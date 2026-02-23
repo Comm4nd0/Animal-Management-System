@@ -14,7 +14,7 @@ import 'demo_data_generator.dart';
 ///   3. Sync demo data from the API into local SQLite.
 ///   4. Set [AnimalProvider.isDemoMode] = true.
 ///   5. On mobile only: if the API is unreachable, fall back to
-///      [DemoDataGenerator] which creates ~200 animals directly in SQLite.
+///      [DemoDataGenerator] which creates ~1,000 animals directly in SQLite.
 ///      (Web builds skip the fallback because sqflite isn't available.)
 ///
 /// **Exit flow**:
