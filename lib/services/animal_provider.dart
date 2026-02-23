@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/models.dart';
+import '../utils/constants.dart';
 import 'api_service.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
@@ -200,11 +201,32 @@ class AnimalProvider extends ChangeNotifier {
     return result;
   }
 
-  List<String> get availableSpecies =>
-      _animals.map((a) => a.species).toSet().toList()..sort();
+  List<String> get availableSpecies {
+    final fromAnimals = _animals.map((a) => a.species).toSet();
+    final all = {...fromAnimals, ...Species.all};
+    return all.toList()..sort();
+  }
 
-  List<String> get availableBreeds =>
-      _animals.map((a) => a.breed).toSet().toList()..sort();
+  List<String> get availableBreeds {
+    // When a species filter is active, show breeds for that species;
+    // otherwise show all breeds across all species.
+    final speciesFilter = _tableSpeciesFilter;
+    if (speciesFilter != null) {
+      final knownBreeds = breedsForSpecies(speciesFilter);
+      final dataBreeds = _animals
+          .where((a) => a.species == speciesFilter)
+          .map((a) => a.breed)
+          .toSet();
+      return {...knownBreeds, ...dataBreeds}.toList()..sort();
+    }
+    // No species selected — combine all known breeds and breeds from data
+    final allKnown = <String>{};
+    for (final sp in Species.all) {
+      allKnown.addAll(breedsForSpecies(sp));
+    }
+    allKnown.addAll(_animals.map((a) => a.breed));
+    return allKnown.toList()..sort();
+  }
 
   List<Animal> get maleAnimals =>
       _animals.where((a) => a.sex == Sex.male).toList();
@@ -390,7 +412,15 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> loadHealthRecords(String animalId) async {
-    _healthRecords = await _db.getHealthRecords(animalId);
+    if (kIsWeb) {
+      try {
+        _healthRecords = await _api.getHealthRecords(animalId);
+      } catch (_) {
+        _healthRecords = [];
+      }
+    } else {
+      _healthRecords = await _db.getHealthRecords(animalId);
+    }
     notifyListeners();
   }
 
@@ -445,10 +475,29 @@ class AnimalProvider extends ChangeNotifier {
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
-    await _db.insertAnimal(animal);
-    _animals = await _db.getAllAnimals();
-    _stats = await _db.getAnimalStats();
-    notifyListeners();
+    if (kIsWeb) {
+      // Web: sqflite is not available, persist via API only.
+      try {
+        final created = await _api.createAnimal(animal);
+        _upsertAnimalInMemory(created);
+        notifyListeners();
+      } catch (e) {
+        return 'Failed to add animal. Please try again.';
+      }
+    } else {
+      // Mobile: push to API if online, then save to local DB.
+      if (isLoggedIn) {
+        try {
+          await _api.createAnimal(animal);
+        } catch (_) {
+          // API unreachable — save locally, will sync later.
+        }
+      }
+      await _db.insertAnimal(animal);
+      _animals = await _db.getAllAnimals();
+      _stats = await _db.getAnimalStats();
+      notifyListeners();
+    }
     return null;
   }
 
@@ -501,10 +550,22 @@ class AnimalProvider extends ChangeNotifier {
 
   Future<void> deleteAnimal(String id) async {
     if (!canWrite) return;
-    await _db.deleteAnimal(id);
-    _animals = await _db.getAllAnimals();
-    _stats = await _db.getAnimalStats();
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteAnimal(id);
+        _animals.removeWhere((a) => a.id == id);
+        _tableAnimals.removeWhere((a) => a.id == id);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.deleteAnimal(id); } catch (_) {}
+      }
+      await _db.deleteAnimal(id);
+      _animals = await _db.getAllAnimals();
+      _stats = await _db.getAnimalStats();
+      notifyListeners();
+    }
   }
 
   Animal? getAnimalById(String id) {
@@ -622,16 +683,38 @@ class AnimalProvider extends ChangeNotifier {
 
   Future<void> addHealthRecord(HealthRecord record) async {
     if (!canWrite) return;
-    await _db.insertHealthRecord(record);
-    _healthRecords = await _db.getHealthRecords(record.animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createHealthRecord(record);
+        _healthRecords.insert(0, created);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.createHealthRecord(record); } catch (_) {}
+      }
+      await _db.insertHealthRecord(record);
+      _healthRecords = await _db.getHealthRecords(record.animalId);
+      notifyListeners();
+    }
   }
 
   Future<void> deleteHealthRecord(String id, String animalId) async {
     if (!canWrite) return;
-    await _db.deleteHealthRecord(id);
-    _healthRecords = await _db.getHealthRecords(animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteHealthRecord(id);
+        _healthRecords.removeWhere((r) => r.id == id);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.deleteHealthRecord(id); } catch (_) {}
+      }
+      await _db.deleteHealthRecord(id);
+      _healthRecords = await _db.getHealthRecords(animalId);
+      notifyListeners();
+    }
   }
 
   Future<List<HealthRecord>> getUpcomingHealthReminders() async {
@@ -641,7 +724,15 @@ class AnimalProvider extends ChangeNotifier {
   // ─── Animal Images ──────────────────────────────────────────
 
   Future<void> loadAnimalImages(String animalId) async {
-    _animalImages = await _db.getAnimalImages(animalId);
+    if (kIsWeb) {
+      try {
+        _animalImages = await _api.getAnimalImages(animalId);
+      } catch (_) {
+        _animalImages = [];
+      }
+    } else {
+      _animalImages = await _db.getAnimalImages(animalId);
+    }
     notifyListeners();
   }
 
@@ -664,22 +755,49 @@ class AnimalProvider extends ChangeNotifier {
 
   /// Picks an image file, copies it to app storage, and saves the record.
   /// Returns the created [AnimalImage], or null if no file was copied.
+  ///
+  /// On web, [imageBytes] must be provided (raw file bytes) since dart:io File
+  /// is not available. On mobile, [sourceFile] is used.
   Future<AnimalImage?> addAnimalImage(
     String animalId,
     File sourceFile, {
     bool isProfile = false,
     String caption = '',
+    List<int>? imageBytes,
+    String? fileName,
   }) async {
-    // Copy to app documents directory for persistence
+    if (kIsWeb) {
+      // Web: upload via API
+      try {
+        final bytes = imageBytes ?? await sourceFile.readAsBytes();
+        final name = fileName ?? p.basename(sourceFile.path);
+        final shouldBeProfile = isProfile || _animalImages.isEmpty;
+        final created = await _api.uploadAnimalImage(
+          animalId, bytes, name,
+          caption: caption,
+          isProfile: shouldBeProfile,
+        );
+        _animalImages.insert(0, created);
+        if (shouldBeProfile) {
+          _profileImageCache[animalId] = created.imagePath;
+        }
+        notifyListeners();
+        return created;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    // Mobile: copy to app documents directory for persistence
     final appDir = await getApplicationDocumentsDirectory();
     final imagesDir = Directory(p.join(appDir.path, 'animal_images'));
     if (!await imagesDir.exists()) {
       await imagesDir.create(recursive: true);
     }
     final ext = p.extension(sourceFile.path);
-    final fileName =
+    final fName =
         '${animalId}_${DateTime.now().millisecondsSinceEpoch}$ext';
-    final savedFile = await sourceFile.copy(p.join(imagesDir.path, fileName));
+    final savedFile = await sourceFile.copy(p.join(imagesDir.path, fName));
 
     // If no images exist yet, make this the profile
     final existing = await _db.getAnimalImages(animalId);
@@ -703,12 +821,22 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> deleteAnimalImage(String imageId, String animalId) async {
-    // Find the image to delete the file
+    if (kIsWeb) {
+      try {
+        await _api.deleteAnimalImage(animalId, imageId);
+        _animalImages.removeWhere((i) => i.id == imageId);
+        final profile = _animalImages.where((i) => i.isProfile).toList();
+        _profileImageCache[animalId] =
+            profile.isNotEmpty ? profile.first.imagePath : null;
+        notifyListeners();
+      } catch (_) {}
+      return;
+    }
+    // Mobile: also delete the file from disk
     final image = _animalImages.firstWhere(
       (i) => i.id == imageId,
       orElse: () => AnimalImage(animalId: animalId, imagePath: ''),
     );
-    // Delete the file from disk
     if (image.imagePath.isNotEmpty) {
       final file = File(image.imagePath);
       if (await file.exists()) {
@@ -718,7 +846,6 @@ class AnimalProvider extends ChangeNotifier {
     await _db.deleteAnimalImage(imageId);
     _animalImages = await _db.getAnimalImages(animalId);
 
-    // Update profile cache
     final profile = _animalImages.where((i) => i.isProfile).toList();
     _profileImageCache[animalId] =
         profile.isNotEmpty ? profile.first.imagePath : null;
@@ -726,6 +853,17 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   Future<void> setProfileImage(String animalId, String imageId) async {
+    if (kIsWeb) {
+      try {
+        await _api.setAnimalProfileImage(animalId, imageId);
+        _animalImages = await _api.getAnimalImages(animalId);
+        final profile = _animalImages.where((i) => i.isProfile).toList();
+        _profileImageCache[animalId] =
+            profile.isNotEmpty ? profile.first.imagePath : null;
+        notifyListeners();
+      } catch (_) {}
+      return;
+    }
     await _db.setProfileImage(animalId, imageId);
     _animalImages = await _db.getAnimalImages(animalId);
 
@@ -956,22 +1094,52 @@ class AnimalProvider extends ChangeNotifier {
   List<WeightRecord> get weightRecords => _weightRecords;
 
   Future<void> loadWeightRecords(String animalId) async {
-    _weightRecords = await _db.getWeightRecords(animalId);
+    if (kIsWeb) {
+      try {
+        _weightRecords = await _api.getWeightRecords(animalId);
+      } catch (_) {
+        _weightRecords = [];
+      }
+    } else {
+      _weightRecords = await _db.getWeightRecords(animalId);
+    }
     notifyListeners();
   }
 
   Future<void> addWeightRecord(WeightRecord record) async {
     if (!canWrite) return;
-    await _db.insertWeightRecord(record);
-    _weightRecords = await _db.getWeightRecords(record.animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createWeightRecord(record);
+        _weightRecords.insert(0, created);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.createWeightRecord(record); } catch (_) {}
+      }
+      await _db.insertWeightRecord(record);
+      _weightRecords = await _db.getWeightRecords(record.animalId);
+      notifyListeners();
+    }
   }
 
   Future<void> deleteWeightRecord(String id, String animalId) async {
     if (!canWrite) return;
-    await _db.deleteWeightRecord(id);
-    _weightRecords = await _db.getWeightRecords(animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteWeightRecord(id);
+        _weightRecords.removeWhere((r) => r.id == id);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.deleteWeightRecord(id); } catch (_) {}
+      }
+      await _db.deleteWeightRecord(id);
+      _weightRecords = await _db.getWeightRecords(animalId);
+      notifyListeners();
+    }
   }
 
   // ─── Show Results ─────────────────────────────────────────────
@@ -980,22 +1148,52 @@ class AnimalProvider extends ChangeNotifier {
   List<ShowResult> get showResults => _showResults;
 
   Future<void> loadShowResults(String animalId) async {
-    _showResults = await _db.getShowResults(animalId);
+    if (kIsWeb) {
+      try {
+        _showResults = await _api.getShowResults(animalId);
+      } catch (_) {
+        _showResults = [];
+      }
+    } else {
+      _showResults = await _db.getShowResults(animalId);
+    }
     notifyListeners();
   }
 
   Future<void> addShowResult(ShowResult result) async {
     if (!canWrite) return;
-    await _db.insertShowResult(result);
-    _showResults = await _db.getShowResults(result.animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createShowResult(result);
+        _showResults.insert(0, created);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.createShowResult(result); } catch (_) {}
+      }
+      await _db.insertShowResult(result);
+      _showResults = await _db.getShowResults(result.animalId);
+      notifyListeners();
+    }
   }
 
   Future<void> deleteShowResult(String id, String animalId) async {
     if (!canWrite) return;
-    await _db.deleteShowResult(id);
-    _showResults = await _db.getShowResults(animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteShowResult(id);
+        _showResults.removeWhere((r) => r.id == id);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.deleteShowResult(id); } catch (_) {}
+      }
+      await _db.deleteShowResult(id);
+      _showResults = await _db.getShowResults(animalId);
+      notifyListeners();
+    }
   }
 
   // ─── Financial Records ────────────────────────────────────────
@@ -1004,22 +1202,52 @@ class AnimalProvider extends ChangeNotifier {
   List<FinancialRecord> get financialRecords => _financialRecords;
 
   Future<void> loadFinancialRecords(String animalId) async {
-    _financialRecords = await _db.getFinancialRecords(animalId);
+    if (kIsWeb) {
+      try {
+        _financialRecords = await _api.getFinancialRecords(animalId);
+      } catch (_) {
+        _financialRecords = [];
+      }
+    } else {
+      _financialRecords = await _db.getFinancialRecords(animalId);
+    }
     notifyListeners();
   }
 
   Future<void> addFinancialRecord(FinancialRecord record) async {
     if (!canWrite) return;
-    await _db.insertFinancialRecord(record);
-    _financialRecords = await _db.getFinancialRecords(record.animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createFinancialRecord(record);
+        _financialRecords.insert(0, created);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.createFinancialRecord(record); } catch (_) {}
+      }
+      await _db.insertFinancialRecord(record);
+      _financialRecords = await _db.getFinancialRecords(record.animalId);
+      notifyListeners();
+    }
   }
 
   Future<void> deleteFinancialRecord(String id, String animalId) async {
     if (!canWrite) return;
-    await _db.deleteFinancialRecord(id);
-    _financialRecords = await _db.getFinancialRecords(animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteFinancialRecord(id);
+        _financialRecords.removeWhere((r) => r.id == id);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.deleteFinancialRecord(id); } catch (_) {}
+      }
+      await _db.deleteFinancialRecord(id);
+      _financialRecords = await _db.getFinancialRecords(animalId);
+      notifyListeners();
+    }
   }
 
   // ─── Document Attachments ────────────────────────────────────
@@ -1028,22 +1256,52 @@ class AnimalProvider extends ChangeNotifier {
   List<DocumentAttachment> get documentAttachments => _documentAttachments;
 
   Future<void> loadDocumentAttachments(String animalId) async {
-    _documentAttachments = await _db.getDocumentAttachments(animalId);
+    if (kIsWeb) {
+      try {
+        _documentAttachments = await _api.getDocumentAttachments(animalId);
+      } catch (_) {
+        _documentAttachments = [];
+      }
+    } else {
+      _documentAttachments = await _db.getDocumentAttachments(animalId);
+    }
     notifyListeners();
   }
 
   Future<void> addDocumentAttachment(DocumentAttachment doc) async {
     if (!canWrite) return;
-    await _db.insertDocumentAttachment(doc);
-    _documentAttachments = await _db.getDocumentAttachments(doc.animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        final created = await _api.createDocumentAttachment(doc);
+        _documentAttachments.insert(0, created);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.createDocumentAttachment(doc); } catch (_) {}
+      }
+      await _db.insertDocumentAttachment(doc);
+      _documentAttachments = await _db.getDocumentAttachments(doc.animalId);
+      notifyListeners();
+    }
   }
 
   Future<void> deleteDocumentAttachment(String id, String animalId) async {
     if (!canWrite) return;
-    await _db.deleteDocumentAttachment(id);
-    _documentAttachments = await _db.getDocumentAttachments(animalId);
-    notifyListeners();
+    if (kIsWeb) {
+      try {
+        await _api.deleteDocumentAttachment(id);
+        _documentAttachments.removeWhere((d) => d.id == id);
+        notifyListeners();
+      } catch (_) {}
+    } else {
+      if (isLoggedIn) {
+        try { await _api.deleteDocumentAttachment(id); } catch (_) {}
+      }
+      await _db.deleteDocumentAttachment(id);
+      _documentAttachments = await _db.getDocumentAttachments(animalId);
+      notifyListeners();
+    }
   }
 
   // ─── Support Messaging ──────────────────────────────────────
@@ -1264,6 +1522,9 @@ class AnimalProvider extends ChangeNotifier {
 
   void setTableSpeciesFilter(String? species) {
     _tableSpeciesFilter = species;
+    // Clear breed filter when species changes since the breed may not
+    // belong to the new species.
+    _tableBreedFilter = null;
     _tablePage = 1;
     fetchTablePage();
   }

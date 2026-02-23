@@ -24,9 +24,7 @@ class BreedingScreen extends StatefulWidget {
   State<BreedingScreen> createState() => _BreedingScreenState();
 }
 
-class _BreedingScreenState extends State<BreedingScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _BreedingScreenState extends State<BreedingScreen> {
   String? _selectedAnimalId;
   List<BreedingSuggestion> _suggestions = [];
   bool _isLoadingSuggestions = false;
@@ -36,22 +34,14 @@ class _BreedingScreenState extends State<BreedingScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _selectedAnimalId = widget.selectedAnimalId;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ensureAnimalsLoaded();
       if (_selectedAnimalId != null) {
-        _tabController.index = 1;
         _loadSuggestions();
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
   }
 
   /// Make sure the full animal list is available for the dropdown.
@@ -104,113 +94,9 @@ class _BreedingScreenState extends State<BreedingScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Breeding'),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: const [
-            Tab(text: 'Active Breedings'),
-            Tab(text: 'Suggestions'),
-          ],
-        ),
+        title: const Text('Breeding Suggestions'),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          _buildActiveBreedingsTab(),
-          _buildSuggestionsTab(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveBreedingsTab() {
-    return Consumer<AnimalProvider>(
-      builder: (context, provider, _) {
-        final records = provider.breedingRecords;
-        if (records.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.favorite_border,
-                    size: 64, color: Colors.grey.shade400),
-                const SizedBox(height: 16),
-                Text(
-                  'No active breedings',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.grey.shade600,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                const Text('Use the Suggestions tab to find compatible pairs'),
-              ],
-            ),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: records.length,
-          itemBuilder: (context, index) {
-            final record = records[index];
-            final sire = provider.getAnimalById(record.sireId);
-            final dam = provider.getAnimalById(record.damId);
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.favorite, color: AppTheme.femaleColor),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${sire?.name ?? "Unknown"} x ${dam?.name ?? "Unknown"}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                        _buildStatusChip(record.status),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    if (record.method != null)
-                      Text('Method: ${record.method}'),
-                    if (record.expectedOffspringCoi != null)
-                      Text(
-                        'Expected COI: ${record.expectedOffspringCoi!.toStringAsFixed(2)}%',
-                      ),
-                    if (record.gestationDaysRemaining != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: LinearProgressIndicator(
-                          value: _gestationProgress(record),
-                          backgroundColor: Colors.grey.shade200,
-                          valueColor: const AlwaysStoppedAnimation(
-                              AppTheme.primaryColor),
-                        ),
-                      ),
-                    if (record.gestationDaysRemaining != null)
-                      Text(
-                        '${record.gestationDaysRemaining} days remaining',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+      body: _buildSuggestionsTab(),
     );
   }
 
@@ -341,46 +227,6 @@ class _BreedingScreenState extends State<BreedingScreen>
     );
   }
 
-  Widget _buildStatusChip(BreedingStatus status) {
-    Color color;
-    switch (status) {
-      case BreedingStatus.planned:
-        color = Colors.blue;
-        break;
-      case BreedingStatus.confirmed:
-        color = Colors.orange;
-        break;
-      case BreedingStatus.pregnant:
-        color = AppTheme.femaleColor;
-        break;
-      case BreedingStatus.whelping:
-        color = Colors.purple;
-        break;
-      case BreedingStatus.completed:
-        color = AppTheme.primaryColor;
-        break;
-      case BreedingStatus.unsuccessful:
-      case BreedingStatus.cancelled:
-        color = Colors.grey;
-        break;
-    }
-    return Chip(
-      label: Text(
-        status.name.toUpperCase(),
-        style: const TextStyle(color: Colors.white, fontSize: 10),
-      ),
-      backgroundColor: color,
-    );
-  }
-
-  double _gestationProgress(BreedingRecord record) {
-    if (record.expectedDueDate == null) return 0;
-    final total =
-        record.expectedDueDate!.difference(record.breedingDate).inDays;
-    final elapsed = DateTime.now().difference(record.breedingDate).inDays;
-    if (total <= 0) return 0;
-    return (elapsed / total).clamp(0.0, 1.0);
-  }
 }
 
 // ─── Analysis Progress Panel ──────────────────────────────────────────────

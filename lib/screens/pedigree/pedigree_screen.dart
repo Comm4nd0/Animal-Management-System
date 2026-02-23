@@ -291,8 +291,16 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
 
   Widget _buildPedigreeChart(PedigreeNode tree) {
     final columns = _flattenTree(tree);
-    // Total height based on the deepest generation's cell count
-    final maxSlots = columns.last.length; // 2^_generations
+
+    // Trim trailing columns that have no animals assigned at all.
+    var visibleCount = columns.length;
+    while (visibleCount > 1 && columns[visibleCount - 1].every((n) => n == null)) {
+      visibleCount--;
+    }
+    final visibleColumns = columns.sublist(0, visibleCount);
+
+    // Total height based on the deepest visible generation's cell count
+    final maxSlots = visibleColumns.last.length;
     final cellH = _cardHeight(_generations) + 8; // card + spacing
     final totalHeight = math.max(maxSlots * cellH, 300.0);
 
@@ -301,11 +309,11 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var gen = 0; gen < columns.length; gen++) ...[
-            _buildGenerationColumn(columns[gen], gen, totalHeight),
-            if (gen < columns.length - 1)
+          for (var gen = 0; gen < visibleColumns.length; gen++) ...[
+            _buildGenerationColumn(visibleColumns[gen], gen, totalHeight),
+            if (gen < visibleColumns.length - 1)
               _buildConnectorColumn(
-                  columns[gen].length, columns[gen + 1].length, totalHeight),
+                  visibleColumns[gen].length, visibleColumns[gen + 1].length, totalHeight),
           ],
         ],
       ),
@@ -521,7 +529,7 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
       width: w,
       height: h,
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.grey.shade200,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey.shade300, width: 1),
       ),
@@ -530,7 +538,7 @@ class _PedigreeScreenState extends State<PedigreeScreen> {
           label,
           style: TextStyle(
             fontSize: 10,
-            color: Colors.grey.shade400,
+            color: Colors.grey.shade500,
             fontStyle: FontStyle.italic,
           ),
         ),
