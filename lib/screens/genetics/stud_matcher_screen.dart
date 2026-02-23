@@ -93,6 +93,7 @@ class _StudMatcherScreenState extends State<StudMatcherScreen> {
       final results = await provider.searchParentCandidates(
         sex: Sex.male,
         query: query,
+        aliveOnly: true,
       );
       if (!mounted) return;
       setState(() {

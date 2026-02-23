@@ -223,6 +223,7 @@ class AnimalProvider extends ChangeNotifier {
     String? breed,
     required Sex sex,
     String query = '',
+    bool aliveOnly = false,
   }) async {
     try {
       final results = await ApiService().getAnimals(
@@ -230,6 +231,7 @@ class AnimalProvider extends ChangeNotifier {
         breed: (breed != null && breed.isNotEmpty) ? breed : null,
         sex: sex == Sex.male ? 0 : 1,
         search: query.isNotEmpty ? query : null,
+        status: aliveOnly ? 0 : null,
       );
       return results;
     } catch (_) {
@@ -239,6 +241,7 @@ class AnimalProvider extends ChangeNotifier {
       final lowerBreed = breed?.toLowerCase() ?? '';
       final lowerQuery = query.toLowerCase();
       return sexAnimals.where((a) {
+        if (aliveOnly && a.status != AnimalStatus.alive) return false;
         if (lowerSpecies != null &&
             a.species.toLowerCase() != lowerSpecies) return false;
         if (lowerBreed.isNotEmpty && a.breed.toLowerCase() != lowerBreed) {
