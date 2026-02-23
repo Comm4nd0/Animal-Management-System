@@ -244,14 +244,15 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
               PopupMenuButton<String>(
                 onSelected: (value) => _handleMenuAction(value, animal),
                 itemBuilder: (_) => [
-                  const PopupMenuItem(
-                    value: 'breeding',
-                    child: ListTile(
-                      leading: Icon(Icons.favorite),
-                      title: Text('Breeding Suggestions'),
+                  if (animal.status == AnimalStatus.alive)
+                    const PopupMenuItem(
+                      value: 'breeding',
+                      child: ListTile(
+                        leading: Icon(Icons.favorite),
+                        title: Text('Breeding Suggestions'),
+                      ),
                     ),
-                  ),
-                  if (animal.sex == Sex.male)
+                  if (animal.status == AnimalStatus.alive && animal.sex == Sex.male)
                     const PopupMenuItem(
                       value: 'stud_matcher',
                       child: ListTile(
@@ -466,18 +467,20 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
         ),
         // Family Tree section (4 generations deep)
         _buildFamilyTreeSection(context, animal),
-        const SizedBox(height: 8),
-        ElevatedButton.icon(
-          onPressed: () => Navigator.pushNamed(
-            context,
-            '/breeding/${animal.id}',
+        if (animal.status == AnimalStatus.alive) ...[
+          const SizedBox(height: 8),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pushNamed(
+              context,
+              '/breeding/${animal.id}',
+            ),
+            icon: const Icon(Icons.favorite),
+            label: const Text('Get Breeding Suggestions'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.femaleColor,
+            ),
           ),
-          icon: const Icon(Icons.favorite),
-          label: const Text('Get Breeding Suggestions'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.femaleColor,
-          ),
-        ),
+        ],
       ],
     );
   }
@@ -559,7 +562,15 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
 
   Widget _buildPedigreeChart(PedigreeNode tree) {
     final columns = _flattenMiniTree(tree);
-    final maxSlots = columns.last.length;
+
+    // Trim trailing columns that have no animals assigned at all.
+    var visibleCount = columns.length;
+    while (visibleCount > 1 && columns[visibleCount - 1].every((n) => n == null)) {
+      visibleCount--;
+    }
+    final visibleColumns = columns.sublist(0, visibleCount);
+
+    final maxSlots = visibleColumns.last.length;
     final cellH = _miniCardHeight(_miniMaxGen) + 6;
     final totalHeight = (maxSlots * cellH).clamp(200.0, 1200.0);
 
@@ -568,10 +579,10 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (var gen = 0; gen < columns.length; gen++) ...[
-            _buildMiniGenColumn(columns[gen], gen),
-            if (gen < columns.length - 1)
-              _buildMiniConnectors(columns[gen].length, columns[gen + 1].length),
+          for (var gen = 0; gen < visibleColumns.length; gen++) ...[
+            _buildMiniGenColumn(visibleColumns[gen], gen),
+            if (gen < visibleColumns.length - 1)
+              _buildMiniConnectors(visibleColumns[gen].length, visibleColumns[gen + 1].length),
           ],
         ],
       ),
@@ -708,13 +719,13 @@ class _AnimalDetailScreenState extends State<AnimalDetailScreen>
       width: w,
       height: h,
       decoration: BoxDecoration(
-        color: Colors.grey.shade50,
+        color: Colors.grey.shade200,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: Colors.grey.shade300),
       ),
       child: Center(
         child: Text(label,
-          style: TextStyle(fontSize: 9, color: Colors.grey.shade400, fontStyle: FontStyle.italic)),
+          style: TextStyle(fontSize: 9, color: Colors.grey.shade500, fontStyle: FontStyle.italic)),
       ),
     );
   }
