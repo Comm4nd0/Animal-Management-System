@@ -9,7 +9,6 @@ import 'database_service.dart';
 import 'genetics_service.dart';
 import 'notification_service.dart';
 import 'pedigree_validator.dart';
-import 'api_service.dart';
 import 'sync_service.dart';
 
 /// Central state management provider for all animal-related data.
@@ -411,10 +410,30 @@ class AnimalProvider extends ChangeNotifier {
   }
 
   /// Runs a full data audit on all animals. Returns a list of issues.
+  ///
+  /// On web, sqflite is unavailable so we fetch all animals from the API
+  /// and pass them directly to the validator.  On mobile, the in-memory
+  /// [_animals] list (loaded from SQLite by [loadAll]) is already complete.
   Future<List<DataIssue>> auditData({
     void Function(int processed, int total)? onProgress,
   }) async {
-    return _validator.auditAll(onProgress: onProgress);
+    List<Animal> animalsToAudit;
+    if (kIsWeb) {
+      // On web, _animals only holds a few recent animals from the dashboard.
+      // Fetch the full set from the API for a complete audit.
+      try {
+        animalsToAudit = await ApiService().getAllAnimals();
+      } catch (_) {
+        // If the API call fails, fall back to whatever is in memory.
+        animalsToAudit = _animals;
+      }
+    } else {
+      animalsToAudit = _animals;
+    }
+    return _validator.auditAll(
+      animals: animalsToAudit,
+      onProgress: onProgress,
+    );
   }
 
   // ─── Animal Operations ────────────────────────────────────────

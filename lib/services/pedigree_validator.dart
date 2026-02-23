@@ -158,11 +158,17 @@ class PedigreeValidator {
 
   /// Runs a full audit of all pedigree data and returns a list of issues.
   ///
+  /// When [animals] is provided the audit runs entirely in-memory without
+  /// touching the database.  This is required on web where sqflite is not
+  /// available, and avoids a redundant DB round-trip on mobile when the
+  /// caller already holds the full animal list.
+  ///
   /// Streams progress via [onProgress] callback with (processed, total).
   Future<List<DataIssue>> auditAll({
+    List<Animal>? animals,
     void Function(int processed, int total)? onProgress,
   }) async {
-    final animals = await _db.getAllAnimals();
+    animals ??= await _db.getAllAnimals();
     final issues = <DataIssue>[];
 
     // Build fast lookup
