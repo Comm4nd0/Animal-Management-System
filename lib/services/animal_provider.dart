@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show ThemeMode;
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/models.dart';
+import '../utils/constants.dart';
 import 'api_service.dart';
 import 'database_service.dart';
 import 'genetics_service.dart';
@@ -200,11 +201,32 @@ class AnimalProvider extends ChangeNotifier {
     return result;
   }
 
-  List<String> get availableSpecies =>
-      _animals.map((a) => a.species).toSet().toList()..sort();
+  List<String> get availableSpecies {
+    final fromAnimals = _animals.map((a) => a.species).toSet();
+    final all = {...fromAnimals, ...Species.all};
+    return all.toList()..sort();
+  }
 
-  List<String> get availableBreeds =>
-      _animals.map((a) => a.breed).toSet().toList()..sort();
+  List<String> get availableBreeds {
+    // When a species filter is active, show breeds for that species;
+    // otherwise show all breeds across all species.
+    final speciesFilter = _tableSpeciesFilter;
+    if (speciesFilter != null) {
+      final knownBreeds = breedsForSpecies(speciesFilter);
+      final dataBreeds = _animals
+          .where((a) => a.species == speciesFilter)
+          .map((a) => a.breed)
+          .toSet();
+      return {...knownBreeds, ...dataBreeds}.toList()..sort();
+    }
+    // No species selected — combine all known breeds and breeds from data
+    final allKnown = <String>{};
+    for (final sp in Species.all) {
+      allKnown.addAll(breedsForSpecies(sp));
+    }
+    allKnown.addAll(_animals.map((a) => a.breed));
+    return allKnown.toList()..sort();
+  }
 
   List<Animal> get maleAnimals =>
       _animals.where((a) => a.sex == Sex.male).toList();
@@ -445,10 +467,29 @@ class AnimalProvider extends ChangeNotifier {
     final error = await validateAnimalParentage(animal);
     if (error != null) return error;
 
-    await _db.insertAnimal(animal);
-    _animals = await _db.getAllAnimals();
-    _stats = await _db.getAnimalStats();
-    notifyListeners();
+    if (kIsWeb) {
+      // Web: sqflite is not available, persist via API only.
+      try {
+        final created = await _api.createAnimal(animal);
+        _upsertAnimalInMemory(created);
+        notifyListeners();
+      } catch (e) {
+        return 'Failed to add animal. Please try again.';
+      }
+    } else {
+      // Mobile: push to API if online, then save to local DB.
+      if (isLoggedIn) {
+        try {
+          await _api.createAnimal(animal);
+        } catch (_) {
+          // API unreachable — save locally, will sync later.
+        }
+      }
+      await _db.insertAnimal(animal);
+      _animals = await _db.getAllAnimals();
+      _stats = await _db.getAnimalStats();
+      notifyListeners();
+    }
     return null;
   }
 
@@ -1264,6 +1305,9 @@ class AnimalProvider extends ChangeNotifier {
 
   void setTableSpeciesFilter(String? species) {
     _tableSpeciesFilter = species;
+    // Clear breed filter when species changes since the breed may not
+    // belong to the new species.
+    _tableBreedFilter = null;
     _tablePage = 1;
     fetchTablePage();
   }

@@ -316,8 +316,6 @@ class _AnimalListScreenState extends State<AnimalListScreen> {
                     DropdownMenuItem(value: null, child: Text('All')),
                     DropdownMenuItem(value: 0, child: Text('Alive')),
                     DropdownMenuItem(value: 1, child: Text('Deceased')),
-                    DropdownMenuItem(value: 2, child: Text('Sold')),
-                    DropdownMenuItem(value: 3, child: Text('Transferred')),
                   ],
                   onChanged: (v) => provider.setTableStatusFilter(v),
                 ),
