@@ -257,41 +257,59 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatsRow(BuildContext context, Map<String, int> stats) {
+    final isNarrow = MediaQuery.of(context).size.width < 400;
+    final cards = [
+      _StatCard(
+        label: 'Total',
+        value: '${stats['total'] ?? 0}',
+        icon: Icons.pets,
+        color: AppTheme.primaryColor,
+      ),
+      _StatCard(
+        label: 'Males',
+        value: '${stats['males'] ?? 0}',
+        icon: Icons.male,
+        color: AppTheme.maleColor,
+      ),
+      _StatCard(
+        label: 'Females',
+        value: '${stats['females'] ?? 0}',
+        icon: Icons.female,
+        color: AppTheme.femaleColor,
+      ),
+      _StatCard(
+        label: 'Breeds',
+        value: '${stats['breeds'] ?? 0}',
+        icon: Icons.category,
+        color: AppTheme.accentColor,
+      ),
+    ];
+
+    if (isNarrow) {
+      return Column(
+        children: [
+          Row(children: [cards[0], const SizedBox(width: 8), cards[1]]),
+          const SizedBox(height: 8),
+          Row(children: [cards[2], const SizedBox(width: 8), cards[3]]),
+        ],
+      );
+    }
     return Row(
       children: [
-        _StatCard(
-          label: 'Total',
-          value: '${stats['total'] ?? 0}',
-          icon: Icons.pets,
-          color: AppTheme.primaryColor,
-        ),
+        cards[0],
         const SizedBox(width: 8),
-        _StatCard(
-          label: 'Males',
-          value: '${stats['males'] ?? 0}',
-          icon: Icons.male,
-          color: AppTheme.maleColor,
-        ),
+        cards[1],
         const SizedBox(width: 8),
-        _StatCard(
-          label: 'Females',
-          value: '${stats['females'] ?? 0}',
-          icon: Icons.female,
-          color: AppTheme.femaleColor,
-        ),
+        cards[2],
         const SizedBox(width: 8),
-        _StatCard(
-          label: 'Breeds',
-          value: '${stats['breeds'] ?? 0}',
-          icon: Icons.category,
-          color: AppTheme.accentColor,
-        ),
+        cards[3],
       ],
     );
   }
 
   Widget _buildChartsSection(BuildContext context, AnimalProvider provider) {
     final animals = provider.allAnimals;
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -302,14 +320,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         ),
         const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: SexDistributionChart(animals: animals)),
-            const SizedBox(width: 12),
-            Expanded(child: StatusDistributionChart(animals: animals)),
-          ],
-        ),
+        if (isNarrow) ...[
+          SexDistributionChart(animals: animals),
+          const SizedBox(height: 12),
+          StatusDistributionChart(animals: animals),
+        ] else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: SexDistributionChart(animals: animals)),
+              const SizedBox(width: 12),
+              Expanded(child: StatusDistributionChart(animals: animals)),
+            ],
+          ),
         const SizedBox(height: 12),
         BreedDistributionChart(animals: animals),
         const SizedBox(height: 12),
@@ -325,6 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Charts section using pre-aggregated data from the dashboard-stats API.
   /// No need to load all animals into memory.
   Widget _buildAggregatedChartsSection(BuildContext context, DashboardStats ds) {
+    final isNarrow = MediaQuery.of(context).size.width < 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -335,14 +359,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
         ),
         const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(child: AggregatedPieChart(title: 'Sex Distribution', data: ds.sexDistribution)),
-            const SizedBox(width: 12),
-            Expanded(child: AggregatedPieChart(title: 'Status Breakdown', data: ds.statusDistribution)),
-          ],
-        ),
+        if (isNarrow) ...[
+          AggregatedPieChart(title: 'Sex Distribution', data: ds.sexDistribution),
+          const SizedBox(height: 12),
+          AggregatedPieChart(title: 'Status Breakdown', data: ds.statusDistribution),
+        ] else
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: AggregatedPieChart(title: 'Sex Distribution', data: ds.sexDistribution)),
+              const SizedBox(width: 12),
+              Expanded(child: AggregatedPieChart(title: 'Status Breakdown', data: ds.statusDistribution)),
+            ],
+          ),
         const SizedBox(height: 12),
         AggregatedBarChart(title: 'Breed Distribution', data: ds.breedDistribution),
         const SizedBox(height: 12),
