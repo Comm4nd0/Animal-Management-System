@@ -45,9 +45,6 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     _sireFocusNode.addListener(() {
       if (_sireFocusNode.hasFocus) {
         setState(() => _sireShowSuggestions = true);
-        if (_selectedSireId == null) {
-          _searchCandidates(isSire: true);
-        }
       } else {
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) setState(() => _sireShowSuggestions = false);
@@ -57,9 +54,6 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     _damFocusNode.addListener(() {
       if (_damFocusNode.hasFocus) {
         setState(() => _damShowSuggestions = true);
-        if (_selectedDamId == null) {
-          _searchCandidates(isSire: false);
-        }
       } else {
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) setState(() => _damShowSuggestions = false);
@@ -69,7 +63,7 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     _sireSearchController.addListener(() {
       _sireDebounce?.cancel();
       _sireDebounce = Timer(const Duration(milliseconds: 300), () {
-        if (_selectedSireId == null) {
+        if (_selectedSireId == null && _sireSearchController.text.trim().isNotEmpty) {
           _searchCandidates(isSire: true);
         }
       });
@@ -77,7 +71,7 @@ class _CoiCalculatorScreenState extends State<CoiCalculatorScreen> {
     _damSearchController.addListener(() {
       _damDebounce?.cancel();
       _damDebounce = Timer(const Duration(milliseconds: 300), () {
-        if (_selectedDamId == null) {
+        if (_selectedDamId == null && _damSearchController.text.trim().isNotEmpty) {
           _searchCandidates(isSire: false);
         }
       });
